@@ -16,11 +16,18 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
   const [draggedId, setDraggedId] = useState<number | null>(null)
   const [dragOverId, setDragOverId] = useState<number | null>(null)
   const [dragOverAsChild, setDragOverAsChild] = useState(false)
+  const [deletingCategory, setDeletingCategory] = useState<Category | null>(null)
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null)
+  const [editingName, setEditingName] = useState('')
 
   const createMutation = useMutation({
-    mutationFn: api.createCategory,
-    onSuccess: () => {
+    mutationFn: ({ name, parentId }: { name: string; parentId: number | null }) => 
+      api.createCategory({ name, parentId }),
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['categories'] })
+      if (variables.parentId !== null) {
+        setExpandedIds(prev => new Set([...prev, variables.parentId!]))
+      }
       setCreatingAtId(null)
       setNewCategoryName('')
     },
@@ -30,6 +37,35 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
     mutationFn: api.updateCategory,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categories'] })
+      setEditingCategory(null)
+    },
+  })
+
+  const handleStartEdit = (category: Category) => {
+    setEditingCategory(category)
+    setEditingName(category.name)
+  }
+
+  const handleSaveEdit = () => {
+    if (!editingCategory || !editingName.trim()) return
+    updateMutation.mutate({
+      ...editingCategory,
+      name: editingName.trim(),
+    })
+  }
+
+  const handleCancelEdit = () => {
+    setEditingCategory(null)
+    setEditingName('')
+  }
+
+  const deleteMutation = useMutation({
+    mutationFn: api.deleteCategory,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories'], exact: true })
+    },
+    onError: (error) => {
+      console.error('Failed to delete category:', error)
     },
   })
 
@@ -197,8 +233,24 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
                   onDragOver={(e) => handleDragOver(e, category.id, true)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, category.id, true)}
+                  onDoubleClick={() => handleStartEdit(category)}
                 >
-                  {category.name}
+                  {editingCategory?.id === category.id ? (
+                    <input
+                      type="text"
+                      value={editingName}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveEdit()
+                        else if (e.key === 'Escape') handleCancelEdit()
+                      }}
+                      onBlur={handleSaveEdit}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    category.name
+                  )}
                 </span>
 
                 <div className="category-actions">
@@ -209,6 +261,14 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
                     title="Add child category"
                   >
                     + Add Child
+                  </button>
+                  <button
+                    type="button"
+                    className="action-btn delete-btn"
+                    onClick={() => setDeletingCategory(category)}
+                    title="Delete category"
+                  >
+                    Delete
                   </button>
                 </div>
               </div>
@@ -324,6 +384,34 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
       <div className="tree-help">
         <p>💡 Drag and drop categories to reorganize. Click "+ Add Child" to create nested categories.</p>
       </div>
+
+      {deletingCategory && (
+        <div className="modal-overlay" onClick={() => setDeletingCategory(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h3>Delete Category</h3>
+            <p>Are you sure you want to delete "{deletingCategory.name}"?</p>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="modal-btn modal-btn-cancel"
+                onClick={() => setDeletingCategory(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="modal-btn modal-btn-delete"
+                onClick={() => {
+                  deleteMutation.mutate(deletingCategory.id)
+                  setDeletingCategory(null)
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

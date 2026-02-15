@@ -10,6 +10,9 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
       ...options?.headers,
     },
   })
+  if (res.status === 204) {
+    return undefined as T
+  }
   return res.json()
 }
 
