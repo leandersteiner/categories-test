@@ -262,11 +262,7 @@ function ProductsTab({ products, categories }: { products: Product[]; categories
 }
 
 function CategoriesTab({ categories }: { categories: Category[] }) {
-  return (
-    <div className="tab-content">
-      <CategoryTreeManager categories={categories} />
-    </div>
-  )
+  return <CategoryTreeManager categories={categories} />
 }
 
 type CollectionWithChildren = Collection & { children: CollectionWithChildren[] }
