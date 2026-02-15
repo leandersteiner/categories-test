@@ -224,7 +224,11 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
           const isDragging = draggedId === category.id
 
           return (
-            <div key={category.id} className={`category-item-wrapper depth-${level} ${isDragging ? 'dragging' : ''}`}>
+            <div 
+              key={category.id} 
+              className={`category-item-wrapper depth-${level} ${isDragging ? 'dragging' : ''} ${hasChildNodes ? 'has-children' : ''}`}
+              onClick={() => hasChildNodes && toggleExpand(category.id)}
+            >
               <div
                 className={`category-card depth-${level} ${dragOverId === category.id && !dragOverAsChild ? 'drag-over-sibling' : ''}`}
                 draggable={!isMutating}
@@ -234,7 +238,7 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
                 onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDrop(e, category.id, false)}
               >
-                <div className="category-card-main" onClick={() => hasChildNodes && toggleExpand(category.id)}>
+                <div className={`category-card-main ${hasChildNodes ? 'has-children' : ''}`}>
                   {hasChildNodes && (
                     <span className="expand-icon">{isExpanded ? '▼' : '▶'}</span>
                   )}
@@ -280,7 +284,7 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
                 <div className="category-actions">
                   <button
                     type="button"
-                    className="action-btn"
+                    className="btn-secondary btn-sm"
                     onClick={() => setCreatingAtId(category.id)}
                     title="Add child category"
                     disabled={isMutating}
@@ -289,7 +293,7 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
                   </button>
                   <button
                     type="button"
-                    className="action-btn delete-btn"
+                    className="btn-danger btn-sm"
                     onClick={() => deleteMutation.mutate(category.id)}
                     title="Delete category"
                     disabled={isMutating}
