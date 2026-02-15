@@ -133,8 +133,39 @@ func (s *Store) DeleteCategory(id int) error {
 	if _, ok := s.Categories[id]; !ok {
 		return ErrNotFound
 	}
-	delete(s.Categories, id)
+
+	descendantIDs := s.getDescendantIDs(id)
+	allIDs := append([]int{id}, descendantIDs...)
+
+	for _, p := range s.Products {
+		for _, catID := range p.CategoryIDs {
+			for _, toDelete := range allIDs {
+				if catID == toDelete {
+					if catID == id {
+						return errors.New("this category is in use by products")
+					}
+					catName := s.Categories[catID].Name
+					return errors.New("child category '" + catName + "' is in use by products")
+				}
+			}
+		}
+	}
+
+	for _, toDelete := range allIDs {
+		delete(s.Categories, toDelete)
+	}
 	return nil
+}
+
+func (s *Store) getDescendantIDs(parentID int) []int {
+	var descendants []int
+	for _, c := range s.Categories {
+		if c.ParentID != nil && *c.ParentID == parentID {
+			descendants = append(descendants, c.ID)
+			descendants = append(descendants, s.getDescendantIDs(c.ID)...)
+		}
+	}
+	return descendants
 }
 
 func (s *Store) GetCollections() []*models.Collection {

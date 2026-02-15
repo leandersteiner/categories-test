@@ -3,12 +3,14 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api'
 import { Category, Collection, Product } from '../types'
+import { useToast } from '../components/Toast'
 import '../styles/ShopFrontend.css'
 
 export function ShopFrontend() {
   const { shopId } = useParams<{ shopId: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const { showToast } = useToast()
 
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null)
@@ -16,11 +18,13 @@ export function ShopFrontend() {
   const shopQuery = useQuery({
     queryKey: ['shop', shopId],
     queryFn: () => api.getShop(parseInt(shopId!)),
+    enabled: !!shopId,
   })
 
   const productsQuery = useQuery({
     queryKey: ['shopProducts', shopId],
     queryFn: () => api.getShopProducts(parseInt(shopId!)),
+    enabled: !!shopId,
   })
 
   const collectionsQuery = useQuery({
@@ -32,6 +36,30 @@ export function ShopFrontend() {
     queryKey: ['categories'],
     queryFn: api.getCategories,
   })
+
+  useEffect(() => {
+    if (shopQuery.isError) {
+      showToast(shopQuery.error instanceof Error ? shopQuery.error.message : 'Failed to load shop', 'error')
+    }
+  }, [shopQuery.isError, shopQuery.error, showToast])
+
+  useEffect(() => {
+    if (productsQuery.isError) {
+      showToast(productsQuery.error instanceof Error ? productsQuery.error.message : 'Failed to load products', 'error')
+    }
+  }, [productsQuery.isError, productsQuery.error, showToast])
+
+  useEffect(() => {
+    if (collectionsQuery.isError) {
+      showToast(collectionsQuery.error instanceof Error ? collectionsQuery.error.message : 'Failed to load collections', 'error')
+    }
+  }, [collectionsQuery.isError, collectionsQuery.error, showToast])
+
+  useEffect(() => {
+    if (categoriesQuery.isError) {
+      showToast(categoriesQuery.error instanceof Error ? categoriesQuery.error.message : 'Failed to load categories', 'error')
+    }
+  }, [categoriesQuery.isError, categoriesQuery.error, showToast])
 
   const shop = shopQuery.data
   const allProducts = productsQuery.data ?? []
@@ -224,12 +252,13 @@ export function ShopFrontend() {
     navigate(`/shop/${shopId}?${params.toString()}`)
   }
 
-  if (!shop) return <div>Loading...</div>
-
   return (
     <div className="shop-frontend">
       <header className="shop-header">
-        <h1>{shop.name}</h1>
+        <h1>
+          {shop ? shop.name : 'Loading...'}
+          {shopQuery.isLoading && <span className="inline-loader"></span>}
+        </h1>
         <a href="/admin" className="link">Admin →</a>
       </header>
 
@@ -242,6 +271,7 @@ export function ShopFrontend() {
         getCollectionCategories={getCollectionCategories}
         isCollectionActive={isCollectionActive}
         isCategoryActive={isCategoryActive}
+        isLoading={categoriesQuery.isLoading || collectionsQuery.isLoading}
       />
 
       <div className="shop-container">
@@ -257,6 +287,7 @@ export function ShopFrontend() {
           getCollectionCategories={getCollectionCategories}
           onSelectCategory={(category) => category ? handleNavigate(selectedCollection?.id, category.id) : handleNavigate(selectedCollection?.id)}
           onSelectCollection={(collection) => handleNavigate(collection?.id)}
+          isLoading={categoriesQuery.isLoading || collectionsQuery.isLoading}
         />
 
         <MainContent
@@ -264,6 +295,7 @@ export function ShopFrontend() {
           categoryPath={categoryPath}
           products={filteredProducts}
           onNavigate={handleNavigate}
+          isLoading={productsQuery.isLoading}
         />
       </div>
     </div>
@@ -279,6 +311,7 @@ interface NavMenuProps {
   getCollectionCategories: (id: number) => Category[]
   isCollectionActive: (id: number) => boolean
   isCategoryActive: (id: number, collectionId?: number) => boolean
+  isLoading: boolean
 }
 
 function NavMenu({
@@ -290,6 +323,7 @@ function NavMenu({
   getCollectionCategories,
   isCollectionActive,
   isCategoryActive,
+  isLoading,
 }: NavMenuProps) {
   const buildTree = <T extends { id: number; parentId: number | null; name: string }>(
     items: T[],
@@ -354,6 +388,17 @@ function NavMenu({
     )
   }
 
+  if (isLoading) {
+    return (
+      <nav className="shop-nav">
+        <div className="inline-loading">
+          <span className="inline-loader"></span>
+          <span>Loading...</span>
+        </div>
+      </nav>
+    )
+  }
+
   if (hasCollections) {
     return (
       <nav className="shop-nav">
@@ -410,6 +455,7 @@ interface SidebarProps {
   getCollectionCategories: (collectionId: number) => Category[]
   onSelectCategory: (category: Category | null) => void
   onSelectCollection: (collection: Collection | null) => void
+  isLoading: boolean
 }
 
 function Sidebar({
@@ -423,6 +469,7 @@ function Sidebar({
   getCollectionCategories,
   onSelectCategory,
   onSelectCollection,
+  isLoading,
 }: SidebarProps) {
   const buildTree = <T extends { id: number; parentId: number | null; name: string }>(
     items: T[],
@@ -468,7 +515,12 @@ function Sidebar({
 
   return (
     <aside className="shop-sidebar">
-      {hasCollections ? (
+      {isLoading ? (
+        <div className="inline-loading">
+          <span className="inline-loader"></span>
+          <span>Loading...</span>
+        </div>
+      ) : hasCollections ? (
         <>
           <section className="nav-section">
             <h2>Collections</h2>
@@ -497,9 +549,10 @@ interface MainContentProps {
   categoryPath: Category[]
   products: Product[]
   onNavigate: (collectionId?: number, categoryId?: number) => void
+  isLoading: boolean
 }
 
-function MainContent({ collectionPath, categoryPath, products, onNavigate }: MainContentProps) {
+function MainContent({ collectionPath, categoryPath, products, onNavigate, isLoading }: MainContentProps) {
   const hasBreadcrumbs = collectionPath.length > 0 || categoryPath.length > 0
 
   return (
@@ -530,7 +583,12 @@ function MainContent({ collectionPath, categoryPath, products, onNavigate }: Mai
       )}
 
       <div className="products-grid">
-        {products.length > 0 ? (
+        {isLoading ? (
+          <div className="inline-loading">
+            <span className="inline-loader"></span>
+            <span>Loading products...</span>
+          </div>
+        ) : products.length > 0 ? (
           products.map(product => (
             <div key={product.id} className="product-card">
               <h3>{product.name}</h3>

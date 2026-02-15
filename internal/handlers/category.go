@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"categories-test/internal/models"
 )
@@ -46,6 +47,10 @@ func (h *Handler) DeleteCategory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.store.DeleteCategory(id); err != nil {
+		if strings.Contains(err.Error(), "is in use by products") {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
 		http.Error(w, "Category not found", http.StatusNotFound)
 		return
 	}

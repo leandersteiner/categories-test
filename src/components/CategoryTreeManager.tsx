@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Category } from '../types'
 import { api } from '../api'
+import { useToast } from './Toast'
 import '../styles/CategoryTreeManager.css'
 
 interface CategoryTreeManagerProps {
@@ -10,6 +11,7 @@ interface CategoryTreeManagerProps {
 
 export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
   const queryClient = useQueryClient()
+  const { showToast } = useToast()
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
   const [creatingAtId, setCreatingAtId] = useState<number | null>(null)
   const [newCategoryName, setNewCategoryName] = useState('')
@@ -63,9 +65,10 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
     mutationFn: api.deleteCategory,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categories'], exact: true })
+      setDeletingCategory(null)
     },
-    onError: (error) => {
-      console.error('Failed to delete category:', error)
+    onError: (error: Error) => {
+      showToast(error.message, 'error')
     },
   })
 

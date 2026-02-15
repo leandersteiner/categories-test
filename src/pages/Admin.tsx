@@ -1,18 +1,51 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
 import { Product, Category, Collection, Shop } from '../types'
 import { CategoryTreeSelect } from '../components/CategoryTreeSelect'
 import { CategoryTreeManager } from '../components/CategoryTreeManager'
+import { useToast } from '../components/Toast'
 import '../styles/Admin.css'
 
 export function Admin() {
   const [activeTab, setActiveTab] = useState<'products' | 'categories' | 'collections' | 'shops'>('products')
+  const { showToast } = useToast()
 
-  const { data: products = [] } = useQuery({ queryKey: ['products'], queryFn: api.getProducts })
-  const { data: categories = [] } = useQuery({ queryKey: ['categories'], queryFn: api.getCategories })
-  const { data: collections = [] } = useQuery({ queryKey: ['collections'], queryFn: api.getCollections })
-  const { data: shops = [] } = useQuery({ queryKey: ['shops'], queryFn: api.getShops })
+  const productsQuery = useQuery({ queryKey: ['products'], queryFn: api.getProducts })
+  const categoriesQuery = useQuery({ queryKey: ['categories'], queryFn: api.getCategories })
+  const collectionsQuery = useQuery({ queryKey: ['collections'], queryFn: api.getCollections })
+  const shopsQuery = useQuery({ queryKey: ['shops'], queryFn: api.getShops })
+
+  const products = productsQuery.data ?? []
+  const categories = categoriesQuery.data ?? []
+  const collections = collectionsQuery.data ?? []
+  const shops = shopsQuery.data ?? []
+
+  const isLoading = productsQuery.isLoading || categoriesQuery.isLoading || collectionsQuery.isLoading || shopsQuery.isLoading
+
+  useEffect(() => {
+    if (productsQuery.isError) {
+      showToast(productsQuery.error instanceof Error ? productsQuery.error.message : 'Failed to load products', 'error')
+    }
+  }, [productsQuery.isError, productsQuery.error, showToast])
+
+  useEffect(() => {
+    if (categoriesQuery.isError) {
+      showToast(categoriesQuery.error instanceof Error ? categoriesQuery.error.message : 'Failed to load categories', 'error')
+    }
+  }, [categoriesQuery.isError, categoriesQuery.error, showToast])
+
+  useEffect(() => {
+    if (collectionsQuery.isError) {
+      showToast(collectionsQuery.error instanceof Error ? collectionsQuery.error.message : 'Failed to load collections', 'error')
+    }
+  }, [collectionsQuery.isError, collectionsQuery.error, showToast])
+
+  useEffect(() => {
+    if (shopsQuery.isError) {
+      showToast(shopsQuery.error instanceof Error ? shopsQuery.error.message : 'Failed to load shops', 'error')
+    }
+  }, [shopsQuery.isError, shopsQuery.error, showToast])
 
   return (
     <div className="admin">
@@ -37,10 +70,19 @@ export function Admin() {
       </div>
 
       <div className="admin-content">
-        {activeTab === 'products' && <ProductsTab products={products} categories={categories} />}
-        {activeTab === 'categories' && <CategoriesTab categories={categories} />}
-        {activeTab === 'collections' && <CollectionsTab collections={collections} products={products} />}
-        {activeTab === 'shops' && <ShopsTab shops={shops} collections={collections} />}
+        {isLoading ? (
+          <div className="inline-loading">
+            <span className="inline-loader"></span>
+            <span>Loading...</span>
+          </div>
+        ) : (
+          <>
+            {activeTab === 'products' && <ProductsTab products={products} categories={categories} />}
+            {activeTab === 'categories' && <CategoriesTab categories={categories} />}
+            {activeTab === 'collections' && <CollectionsTab collections={collections} products={products} />}
+            {activeTab === 'shops' && <ShopsTab shops={shops} collections={collections} />}
+          </>
+        )}
       </div>
     </div>
   )

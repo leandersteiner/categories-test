@@ -13,6 +13,10 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
   if (res.status === 204) {
     return undefined as T
   }
+  if (!res.ok) {
+    const error = await res.text()
+    throw new Error(error || `Request failed with status ${res.status}`)
+  }
   return res.json()
 }
 
