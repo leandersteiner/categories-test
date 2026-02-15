@@ -91,6 +91,15 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
     setExpandedIds(newExpanded)
   }
 
+  const expandAll = () => {
+    const allIds = categories.map(c => c.id)
+    setExpandedIds(new Set(allIds))
+  }
+
+  const collapseAll = () => {
+    setExpandedIds(new Set())
+  }
+
   const hasChildren = (categoryId: number) => {
     return categories.some(cat => cat.parentId === categoryId)
   }
@@ -223,13 +232,17 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
           const isDragging = draggedId === category.id
 
           return (
-            <li key={category.id} className={`category-tree-item ${isDragging ? 'dragging' : ''}`}>
+            <li key={category.id} className={`category-tree-item depth-${level} ${isDragging ? 'dragging' : ''}`}>
               <div
-                className={`category-tree-row ${dragOverId === category.id && !dragOverAsChild ? 'drag-over-sibling' : ''}`}
-                style={{ paddingLeft: `${level * 1.5}rem` }}
+                className={`category-tree-row ${dragOverId === category.id && !dragOverAsChild ? 'drag-over-sibling' : ''} ${hasChildNodes ? 'has-children' : ''}`}
                 onDragOver={(e) => handleDragOver(e, category.id, false)}
                 onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDrop(e, category.id, false)}
+                onClick={() => {
+                  if (hasChildNodes) {
+                    toggleExpand(category.id)
+                  }
+                }}
               >
                 <button
                   type="button"
@@ -301,10 +314,7 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
               </div>
 
               {creatingAtId === category.id && (
-                <div
-                  className="category-create-inline"
-                  style={{ paddingLeft: `${(level + 1) * 1.5}rem` }}
-                >
+                <div className="category-create-inline">
                   <input
                     type="text"
                     value={newCategoryName}
@@ -346,8 +356,8 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
         })}
 
         {parentId === null && creatingAtId === -1 && (
-          <li className="category-tree-item">
-            <div className="category-create-inline" style={{ paddingLeft: `${level * 1.5}rem` }}>
+          <li className="category-tree-item depth-0">
+            <div className="category-create-inline">
               <input
                 type="text"
                 value={newCategoryName}
@@ -397,6 +407,10 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
         >
           + Add Top-Level Category
         </button>
+        <div className="tree-header-actions">
+          <button type="button" className="btn-toggle-all" onClick={expandAll}>Expand All</button>
+          <button type="button" className="btn-toggle-all" onClick={collapseAll}>Collapse All</button>
+        </div>
       </div>
 
       <div
