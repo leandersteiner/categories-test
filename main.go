@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -154,9 +155,26 @@ func (s *Store) updateCategory(c *Category) *Category {
 	return c
 }
 
+func (s *Store) isDescendant(parentId, childId int) error {
+	visited := make(map[int]bool)
+	var check func(id int) error
+	check = func(id int) error {
+		if id == parentId {
+			return errors.New("cannot set parent to its own descendant")
+		}
+		visited[id] = true
+		cat, ok := s.Categories[id]
+		if !ok || cat.ParentID == nil {
+			return nil
+		}
+		return check(*cat.ParentID)
+	}
+	return check(childId)
+}
+
 func (s *Store) deleteCategory(id int) error {
 	if _, ok := s.Categories[id]; !ok {
-		return http.ErrNoCookie
+		return errors.New("category not found")
 	}
 	delete(s.Categories, id)
 	return nil
@@ -320,6 +338,14 @@ func updateCategory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	category.ID = id
+
+	if category.ParentID != nil {
+		if err := store.isDescendant(*category.ParentID, id); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
 	writeJSON(w, store.updateCategory(&category))
 }
 

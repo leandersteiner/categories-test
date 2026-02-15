@@ -116,6 +116,16 @@ export function ShopFrontend() {
   const getFilteredProducts = () => {
     let products = allProducts
 
+    if (selectedCategory) {
+      const categoryAndDescendants = [
+        selectedCategory.id,
+        ...getDescendantIds(categories, selectedCategory.id)
+      ]
+      products = products.filter(p =>
+        p.categoryIds.some(catId => categoryAndDescendants.includes(catId))
+      )
+    }
+
     if (selectedCollection) {
       const allCollectionIds = [
         selectedCollection.id,
@@ -124,16 +134,6 @@ export function ShopFrontend() {
       const relevantCollections = collections.filter(c => allCollectionIds.includes(c.id))
       const allProductIds = new Set(relevantCollections.flatMap(c => c.productIds))
       products = products.filter(p => allProductIds.has(p.id))
-    }
-
-    if (selectedCategory) {
-      const allRelatedCategoryIds = [
-        ...getAncestorIds(categories, selectedCategory.id),
-        ...getDescendantIds(categories, selectedCategory.id)
-      ]
-      products = products.filter(p =>
-        p.categoryIds.some(catId => allRelatedCategoryIds.includes(catId))
-      )
     }
 
     return products
@@ -238,8 +238,13 @@ export function ShopFrontend() {
     }
 
     if (categoryId) {
-      const category = categories.find(c => c.id === parseInt(categoryId))
-      setSelectedCategory(category || null)
+      const categoryIdNum = parseInt(categoryId)
+      const category = categories.find(c => c.id === categoryIdNum)
+      if (category) {
+        setSelectedCategory(category)
+      } else {
+        setSelectedCategory(null)
+      }
     } else {
       setSelectedCategory(null)
     }

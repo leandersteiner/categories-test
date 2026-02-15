@@ -37,8 +37,11 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
 
   const updateMutation = useMutation({
     mutationFn: api.updateCategory,
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['categories'] })
+      if (variables.parentId !== null) {
+        setExpandedIds(prev => new Set([...prev, variables.parentId!]))
+      }
       setEditingCategory(null)
     },
   })
@@ -124,7 +127,7 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
 
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault()
-    // Only clear if we're actually leaving the element (not entering a child)
+    e.stopPropagation()
     const rect = e.currentTarget.getBoundingClientRect()
     const x = e.clientX
     const y = e.clientY
@@ -133,6 +136,16 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
       setDragOverId(null)
       setDragOverAsChild(false)
     }
+  }
+
+  const handleToggleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleToggleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
   }
 
   const handleDrop = (e: React.DragEvent, targetId: number | null, makeChild: boolean = false) => {
@@ -158,7 +171,13 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
     }
 
     if (targetId !== null && makeChild && isDescendant(draggedId, targetId)) {
-      alert('Cannot move a category into its own descendant')
+      showToast('Cannot move a category into its own descendant', 'error')
+      setDraggedId(null)
+      return
+    }
+
+    if (targetId !== null && !makeChild && isDescendant(draggedId, targetId)) {
+      showToast('Cannot move a parent category next to its descendant', 'error')
       setDraggedId(null)
       return
     }
@@ -215,7 +234,12 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
                 <button
                   type="button"
                   className="tree-toggle-btn"
-                  onClick={() => hasChildNodes && toggleExpand(category.id)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    hasChildNodes && toggleExpand(category.id)
+                  }}
+                  onDragOver={handleToggleDragOver}
+                  onDrop={handleToggleDrop}
                   disabled={!hasChildNodes}
                 >
                   {hasChildNodes ? (isExpanded ? '▼' : '▶') : '•'}
