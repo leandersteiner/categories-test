@@ -55,11 +55,32 @@ func NewStore() *Store {
 
 var store = NewStore()
 
+func init() {
+	store.Categories[1] = &Category{ID: 1, Name: "category1", ParentID: nil}
+	store.Categories[2] = &Category{ID: 2, Name: "category2", ParentID: nil}
+	store.nextID["category"] = 3
+
+	store.Products[1] = &Product{ID: 1, Name: "product1", Description: "prod1", Price: 20, CategoryIDs: []int{1}}
+	store.Products[2] = &Product{ID: 2, Name: "product2", Description: "prod2", Price: 25, CategoryIDs: []int{1}}
+	store.Products[3] = &Product{ID: 3, Name: "product3", Description: "prod3", Price: 30, CategoryIDs: []int{2}}
+	store.nextID["product"] = 4
+
+	parent1 := 1
+	store.Collections[1] = &Collection{ID: 1, Name: "collection1", ParentID: nil, ProductIDs: []int{1, 3}}
+	store.Collections[2] = &Collection{ID: 2, Name: "collection2", ParentID: &parent1, ProductIDs: []int{2}}
+	store.Collections[3] = &Collection{ID: 3, Name: "collection3", ParentID: nil, ProductIDs: []int{1, 2, 3}}
+	store.nextID["collection"] = 4
+
+	store.Shops[1] = &Shop{ID: 1, Name: "shop1", CollectionIDs: []int{1, 2, 3}}
+	store.nextID["shop"] = 2
+}
+
 func enableCORS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 }
