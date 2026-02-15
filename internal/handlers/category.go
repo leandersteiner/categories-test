@@ -1,0 +1,53 @@
+package handlers
+
+import (
+	"net/http"
+
+	"categories-test/internal/models"
+)
+
+func (h *Handler) ListCategories(w http.ResponseWriter, r *http.Request) {
+	h.writeJSON(w, h.store.GetCategories())
+}
+
+func (h *Handler) CreateCategory(w http.ResponseWriter, r *http.Request) {
+	var category models.Category
+	if err := h.readJSON(r, &category); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	created := h.store.CreateCategory(&category)
+	w.WriteHeader(http.StatusCreated)
+	h.writeJSON(w, created)
+}
+
+func (h *Handler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
+	id, err := h.parseID(r.URL.Path)
+	if err != nil {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
+	var category models.Category
+	if err := h.readJSON(r, &category); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	category.ID = id
+	h.writeJSON(w, h.store.UpdateCategory(&category))
+}
+
+func (h *Handler) DeleteCategory(w http.ResponseWriter, r *http.Request) {
+	id, err := h.parseID(r.URL.Path)
+	if err != nil {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.store.DeleteCategory(id); err != nil {
+		http.Error(w, "Category not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
