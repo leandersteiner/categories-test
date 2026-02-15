@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Category } from '../types'
 import { api } from '../api'
@@ -22,10 +22,46 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
   const [editingName, setEditingName] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
 
-  const filteredCategories = useMemo(() => {
-    if (!searchQuery) return categories
-    return categories.filter(cat => cat.name.toLowerCase().includes(searchQuery.toLowerCase()))
+  const { filteredCategories, matchingIds, exactMatchIds } = useMemo(() => {
+    if (!searchQuery) {
+      return { filteredCategories: categories, matchingIds: new Set<number>(), exactMatchIds: new Set<number>() }
+    }
+    
+    const matching = new Set<number>()
+    const exactMatches = new Set<number>()
+    const allMatches = categories.filter(cat => cat.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    
+    allMatches.forEach(cat => {
+      exactMatches.add(cat.id)
+      let current: Category | undefined = cat
+      while (current) {
+        matching.add(current.id)
+        current = categories.find(c => c.id === current?.parentId)
+      }
+    })
+    
+    return {
+      filteredCategories: categories.filter(cat => matching.has(cat.id)),
+      matchingIds: matching,
+      exactMatchIds: exactMatches
+    }
   }, [categories, searchQuery])
+
+  useEffect(() => {
+    if (searchQuery && matchingIds.size > 0) {
+      const allParentIds = new Set<number>()
+      categories.forEach(cat => {
+        if (matchingIds.has(cat.id)) {
+          let current = cat
+          while (current.parentId) {
+            allParentIds.add(current.parentId)
+            current = categories.find(c => c.id === current.parentId) || current
+          }
+        }
+      })
+      setExpandedIds(prev => new Set([...prev, ...allParentIds]))
+    }
+  }, [searchQuery, matchingIds, categories])
 
   const createMutation = useMutation({
     mutationFn: ({ name, parentId }: { name: string; parentId: number | null }) =>
@@ -214,7 +250,7 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
 
   const isMutating = createMutation.isPending || updateMutation.isPending || deleteMutation.isPending
 
-  const renderTree = (parentId: number | null = null, level: number = 0) => {
+  const renderTree = (matchingIds: Set<number>, exactMatchIds: Set<number>, parentId: number | null = null, level: number = 0) => {
     const items = buildTree(parentId)
     return (
       <div className="category-items-list">
@@ -226,11 +262,11 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
           return (
             <div 
               key={category.id} 
-              className={`category-item-wrapper depth-${level} ${isDragging ? 'dragging' : ''} ${hasChildNodes ? 'has-children' : ''}`}
+              className={`category-item-wrapper depth-${level} ${isDragging ? 'dragging' : ''} ${hasChildNodes ? 'has-children' : ''} ${exactMatchIds.has(category.id) && exactMatchIds.size > 0 ? 'matching' : ''}`}
               onClick={() => hasChildNodes && toggleExpand(category.id)}
             >
               <div
-                className={`category-card depth-${level} ${dragOverId === category.id && !dragOverAsChild ? 'drag-over-sibling' : ''}`}
+                className={`category-card depth-${level} ${dragOverId === category.id && !dragOverAsChild ? 'drag-over-sibling' : ''} ${exactMatchIds.has(category.id) && exactMatchIds.size > 0 ? 'matching' : ''}`}
                 draggable={!isMutating}
                 onDragStart={(e) => handleDragStart(e, category.id)}
                 onDragEnd={handleDragEnd}
@@ -323,7 +359,7 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
 
               {isExpanded && hasChildNodes && (
                 <div className="category-children">
-                  {renderTree(category.id, level + 1)}
+                  {renderTree(matchingIds, exactMatchIds, category.id, level + 1)}
                 </div>
               )}
             </div>
@@ -382,7 +418,7 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
           onDragLeave={handleDragLeave}
           onDrop={(e) => handleDrop(e, null, false)}
         >
-          {renderTree()}
+          {renderTree(matchingIds, exactMatchIds)}
         </div>
         <div className="tree-help">
           <p>💡 Drag and drop categories to reorganize. Click "+ Add Child" to create nested categories.</p>

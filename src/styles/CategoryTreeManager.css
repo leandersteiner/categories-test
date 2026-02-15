@@ -82,6 +82,15 @@
 .category-card.depth-2 { border-left: 4px solid #9b59b6; }
 .category-card.depth-2:hover { border-color: #9b59b6; }
 
+.category-card.matching {
+  background: #fffde7;
+  border-color: #fbc02d !important;
+}
+
+.category-card.matching h3 {
+  color: #f57f17;
+}
+
 .category-card-main {
   display: flex;
   align-items: center;
