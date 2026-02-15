@@ -77,7 +77,22 @@ export function ShopFrontend() {
   }
 
   const collectionTree = buildTree(shopCollections)
-  const categoryTree = buildTree(categories)
+
+  // Get all category IDs that have products
+  const categoriesWithProducts = new Set(
+    allProducts.flatMap(p => p.categoryIds)
+  )
+
+  // Check if a category has products or has descendants with products
+  const hasProductsOrDescendants = (categoryId: number): boolean => {
+    if (categoriesWithProducts.has(categoryId)) return true
+    const children = categories.filter(c => c.parentId === categoryId)
+    return children.some(child => hasProductsOrDescendants(child.id))
+  }
+
+  // Filter categories to only show those with products
+  const categoriesWithProductsTree = categories.filter(c => hasProductsOrDescendants(c.id))
+  const categoryTree = buildTree(categoriesWithProductsTree)
 
   // Get all descendant category IDs for a given category
   const getAllDescendantCategoryIds = (categoryId: number): number[] => {
