@@ -1,0 +1,344 @@
+import { useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Category } from '../types'
+import { api } from '../api'
+import '../styles/CategoryTreeManager.css'
+
+interface CategoryTreeManagerProps {
+  categories: Category[]
+}
+
+export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
+  const queryClient = useQueryClient()
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
+  const [creatingAtId, setCreatingAtId] = useState<number | null>(null)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [draggedId, setDraggedId] = useState<number | null>(null)
+  const [dragOverId, setDragOverId] = useState<number | null>(null)
+  const [dragOverAsChild, setDragOverAsChild] = useState(false)
+
+  const createMutation = useMutation({
+    mutationFn: api.createCategory,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories'] })
+      setCreatingAtId(null)
+      setNewCategoryName('')
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: api.updateCategory,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories'] })
+    },
+  })
+
+  const buildTree = (parentId: number | null = null): Category[] => {
+    return categories
+      .filter(cat => cat.parentId === parentId)
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  const toggleExpand = (categoryId: number) => {
+    const newExpanded = new Set(expandedIds)
+    if (newExpanded.has(categoryId)) {
+      newExpanded.delete(categoryId)
+    } else {
+      newExpanded.add(categoryId)
+    }
+    setExpandedIds(newExpanded)
+  }
+
+  const hasChildren = (categoryId: number) => {
+    return categories.some(cat => cat.parentId === categoryId)
+  }
+
+  const handleCreateCategory = (parentId: number | null) => {
+    if (!newCategoryName.trim()) return
+
+    createMutation.mutate({
+      name: newCategoryName.trim(),
+      parentId,
+    })
+  }
+
+  const handleDragStart = (e: React.DragEvent, categoryId: number) => {
+    e.stopPropagation()
+    setDraggedId(categoryId)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', categoryId.toString())
+  }
+
+  const handleDragEnd = () => {
+    setDraggedId(null)
+    setDragOverId(null)
+    setDragOverAsChild(false)
+  }
+
+  const handleDragOver = (e: React.DragEvent, targetId: number | null, asChild: boolean = false) => {
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverId(targetId)
+    setDragOverAsChild(asChild)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    // Only clear if we're actually leaving the element (not entering a child)
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX
+    const y = e.clientY
+
+    if (x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom) {
+      setDragOverId(null)
+      setDragOverAsChild(false)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent, targetId: number | null, makeChild: boolean = false) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    console.log('Drop event triggered:', { draggedId, targetId, makeChild })
+
+    setDragOverId(null)
+    setDragOverAsChild(false)
+
+    if (draggedId === null) {
+      console.log('No dragged ID, exiting')
+      return
+    }
+
+    if (draggedId === targetId) {
+      console.log('Dropped on itself, exiting')
+      setDraggedId(null)
+      return
+    }
+
+    // Prevent dropping a category into itself or its descendants
+    const isDescendant = (parentId: number, childId: number): boolean => {
+      const children = categories.filter(c => c.parentId === parentId)
+      if (children.some(c => c.id === childId)) return true
+      return children.some(c => isDescendant(c.id, childId))
+    }
+
+    if (targetId !== null && makeChild && isDescendant(draggedId, targetId)) {
+      alert('Cannot move a category into its own descendant')
+      setDraggedId(null)
+      return
+    }
+
+    const category = categories.find(c => c.id === draggedId)
+    if (!category) {
+      console.log('Category not found:', draggedId)
+      setDraggedId(null)
+      return
+    }
+
+    let newParentId: number | null
+
+    if (makeChild) {
+      // Make it a child of the target
+      newParentId = targetId
+      console.log(`Making ${category.name} a child of`, targetId)
+    } else if (targetId !== null) {
+      // Make it a sibling of the target (same parent)
+      const targetCategory = categories.find(c => c.id === targetId)
+      newParentId = targetCategory?.parentId ?? null
+      console.log(`Making ${category.name} a sibling of ${targetCategory?.name}, parent:`, newParentId)
+    } else {
+      // Drop on root
+      newParentId = null
+      console.log(`Making ${category.name} top-level`)
+    }
+
+    if (category.parentId === newParentId) {
+      console.log('Already at this level, no change needed')
+      setDraggedId(null)
+      return
+    }
+
+    console.log('Updating category via API:', { id: category.id, name: category.name, parentId: newParentId })
+
+    updateMutation.mutate({
+      ...category,
+      parentId: newParentId,
+    })
+
+    setDraggedId(null)
+  }
+
+  const renderTree = (parentId: number | null = null, level: number = 0) => {
+    const items = buildTree(parentId)
+
+    return (
+      <ul className="category-tree-list">
+        {items.map(category => {
+          const isExpanded = expandedIds.has(category.id)
+          const hasChildNodes = hasChildren(category.id)
+          const isDragging = draggedId === category.id
+
+          return (
+            <li key={category.id} className={`category-tree-item ${isDragging ? 'dragging' : ''}`}>
+              <div
+                className={`category-tree-row ${dragOverId === category.id && !dragOverAsChild ? 'drag-over-sibling' : ''}`}
+                style={{ paddingLeft: `${level * 1.5}rem` }}
+                onDragOver={(e) => handleDragOver(e, category.id, false)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, category.id, false)}
+              >
+                <button
+                  type="button"
+                  className="tree-toggle-btn"
+                  onClick={() => hasChildNodes && toggleExpand(category.id)}
+                  disabled={!hasChildNodes}
+                >
+                  {hasChildNodes ? (isExpanded ? '▼' : '▶') : '•'}
+                </button>
+
+                <span
+                  className="drag-handle"
+                  title="Drag to reorder"
+                  draggable="true"
+                  onDragStart={(e) => handleDragStart(e, category.id)}
+                  onDragEnd={handleDragEnd}
+                >
+                  ⋮⋮
+                </span>
+
+                <span
+                  className={`category-name ${dragOverId === category.id && dragOverAsChild ? 'drag-over-child' : ''}`}
+                  onDragOver={(e) => handleDragOver(e, category.id, true)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, category.id, true)}
+                >
+                  {category.name}
+                </span>
+
+                <div className="category-actions">
+                  <button
+                    type="button"
+                    className="action-btn"
+                    onClick={() => setCreatingAtId(category.id)}
+                    title="Add child category"
+                  >
+                    + Add Child
+                  </button>
+                </div>
+              </div>
+
+              {creatingAtId === category.id && (
+                <div
+                  className="category-create-inline"
+                  style={{ paddingLeft: `${(level + 1) * 1.5}rem` }}
+                >
+                  <input
+                    type="text"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    placeholder="New category name"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleCreateCategory(category.id)
+                      } else if (e.key === 'Escape') {
+                        setCreatingAtId(null)
+                        setNewCategoryName('')
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn-save"
+                    onClick={() => handleCreateCategory(category.id)}
+                  >
+                    ✓
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-cancel"
+                    onClick={() => {
+                      setCreatingAtId(null)
+                      setNewCategoryName('')
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {isExpanded && hasChildNodes && renderTree(category.id, level + 1)}
+            </li>
+          )
+        })}
+
+        {parentId === null && creatingAtId === -1 && (
+          <li className="category-tree-item">
+            <div className="category-create-inline" style={{ paddingLeft: `${level * 1.5}rem` }}>
+              <input
+                type="text"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                placeholder="New top-level category"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleCreateCategory(null)
+                  } else if (e.key === 'Escape') {
+                    setCreatingAtId(null)
+                    setNewCategoryName('')
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="btn-save"
+                onClick={() => handleCreateCategory(null)}
+              >
+                ✓
+              </button>
+              <button
+                type="button"
+                className="btn-cancel"
+                onClick={() => {
+                  setCreatingAtId(null)
+                  setNewCategoryName('')
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          </li>
+        )}
+      </ul>
+    )
+  }
+
+  return (
+    <div className="category-tree-manager">
+      <div className="tree-header">
+        <button
+          type="button"
+          className="btn-add-root"
+          onClick={() => setCreatingAtId(-1)}
+        >
+          + Add Top-Level Category
+        </button>
+      </div>
+
+      <div
+        className={`tree-drop-zone ${dragOverId === null && draggedId !== null ? 'drag-over-root' : ''}`}
+        onDragOver={(e) => handleDragOver(e, null, false)}
+        onDragLeave={handleDragLeave}
+        onDrop={(e) => handleDrop(e, null, false)}
+      >
+        {renderTree()}
+      </div>
+
+      <div className="tree-help">
+        <p>💡 Drag and drop categories to reorganize. Click "+ Add Child" to create nested categories.</p>
+      </div>
+    </div>
+  )
+}
