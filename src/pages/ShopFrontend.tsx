@@ -254,15 +254,15 @@ export function ShopFrontend() {
           selectedCollection={selectedCollection}
           categoryPath={categoryPath}
           collectionPath={collectionPath}
-          onSelectCategory={setSelectedCategory}
-          onSelectCollection={setSelectedCollection}
+          onSelectCategory={(category) => category ? handleNavigate(selectedCollection?.id, category.id) : handleNavigate(selectedCollection?.id)}
+          onSelectCollection={(collection) => collection && handleNavigate(collection.id)}
         />
 
         <MainContent
-          shopName={shop.name}
-          selectedCollection={selectedCollection}
+          collectionPath={collectionPath}
           categoryPath={categoryPath}
           products={filteredProducts}
+          onNavigate={handleNavigate}
         />
       </div>
     </div>
@@ -473,20 +473,35 @@ function Sidebar({
 }
 
 interface MainContentProps {
-  shopName: string
-  selectedCollection: Collection | null
+  collectionPath: Collection[]
   categoryPath: Category[]
   products: Product[]
+  onNavigate: (collectionId?: number, categoryId?: number) => void
 }
 
-function MainContent({ shopName, selectedCollection, categoryPath, products }: MainContentProps) {
+function MainContent({ collectionPath, categoryPath, products, onNavigate }: MainContentProps) {
   return (
     <main className="shop-main">
       <div className="breadcrumb">
-        <span>{shopName}</span>
-        {selectedCollection && <span> / {selectedCollection.name}</span>}
-        {categoryPath.map(cat => (
-          <span key={cat.id}> / {cat.name}</span>
+        {collectionPath.map((coll, idx) => (
+          <span key={coll.id}>
+            {idx > 0 && " / "}
+            {idx === collectionPath.length - 1 && categoryPath.length === 0 ? (
+              coll.name
+            ) : (
+              <a href="#" onClick={(e) => { e.preventDefault(); onNavigate(coll.id) }}>{coll.name}</a>
+            )}
+          </span>
+        ))}
+        {categoryPath.map((cat, idx) => (
+          <span key={cat.id}>
+            {(collectionPath.length > 0 || idx > 0) && " / "}
+            {idx === categoryPath.length - 1 ? (
+              cat.name
+            ) : (
+              <a href="#" onClick={(e) => { e.preventDefault(); onNavigate(collectionPath[collectionPath.length - 1]?.id, cat.id) }}>{cat.name}</a>
+            )}
+          </span>
         ))}
       </div>
 
