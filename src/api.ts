@@ -1,6 +1,13 @@
-import { Product, Category, Collection, Shop } from './types'
+import { Product, Category, Collection, Shop, PaginatedProducts } from './types'
 
 const API_BASE = 'http://localhost:8080/api'
+
+interface ShopProductsParams {
+  collection?: number
+  category?: number
+  page?: number
+  limit?: number
+}
 
 async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${endpoint}`, {
@@ -18,6 +25,16 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     throw new Error(error || `Request failed with status ${res.status}`)
   }
   return res.json()
+}
+
+function buildQuery(params: Record<string, number | undefined>): string {
+  const queryParts: string[] = []
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) {
+      queryParts.push(`${key}=${value}`)
+    }
+  }
+  return queryParts.length > 0 ? `?${queryParts.join('&')}` : ''
 }
 
 export const api = {
@@ -67,6 +84,21 @@ export const api = {
   deleteShop: (shopId: number) =>
     request<void>(`/shops/${shopId}`, { method: 'DELETE' }),
 
-  getShopProducts: (shopId: number) =>
-    request<Product[]>(`/shops/${shopId}/products`),
+  getShopProducts: (shopId: number, params?: ShopProductsParams) => {
+    const query = buildQuery({
+      collection: params?.collection,
+      category: params?.category,
+      page: params?.page,
+      limit: params?.limit,
+    })
+    return request<PaginatedProducts>(`/shops/${shopId}/products${query}`)
+  },
+
+  getShopCategories: (shopId: number, collectionId?: number, direct?: boolean) => {
+    const params = new URLSearchParams()
+    if (collectionId) params.set('collection', collectionId.toString())
+    if (direct) params.set('direct', 'true')
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return request<Category[]>(`/shops/${shopId}/categories${query}`)
+  },
 }

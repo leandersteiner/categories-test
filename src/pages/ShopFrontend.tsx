@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueries } from '@tanstack/react-query'
 import { api } from '../api'
 import { Category, Collection, Product } from '../types'
 import { useToast } from '../components/Toast'
@@ -14,6 +14,10 @@ export function ShopFrontend() {
 
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null)
+  const [page, setPage] = useState(1)
+
+  const collectionId = searchParams.get('collection')
+  const categoryId = searchParams.get('category')
 
   const shopQuery = useQuery({
     queryKey: ['shop', shopId],
@@ -22,9 +26,15 @@ export function ShopFrontend() {
   })
 
   const productsQuery = useQuery({
-    queryKey: ['shopProducts', shopId],
-    queryFn: () => api.getShopProducts(parseInt(shopId!)),
+    queryKey: ['shopProducts', shopId, collectionId || 'none', categoryId || 'none', page],
+    queryFn: () => api.getShopProducts(parseInt(shopId!), {
+      collection: collectionId ? parseInt(collectionId) : undefined,
+      category: categoryId ? parseInt(categoryId) : undefined,
+      page,
+      limit: 20,
+    }),
     enabled: !!shopId,
+    staleTime: 0,
   })
 
   const collectionsQuery = useQuery({
@@ -35,6 +45,12 @@ export function ShopFrontend() {
   const categoriesQuery = useQuery({
     queryKey: ['categories'],
     queryFn: api.getCategories,
+  })
+
+  const shopCategoriesQuery = useQuery({
+    queryKey: ['shopCategories', shopId, collectionId],
+    queryFn: () => api.getShopCategories(parseInt(shopId!), collectionId ? parseInt(collectionId) : undefined),
+    enabled: !!shopId,
   })
 
   useEffect(() => {
@@ -61,10 +77,33 @@ export function ShopFrontend() {
     }
   }, [categoriesQuery.isError, categoriesQuery.error, showToast])
 
+  useEffect(() => {
+    if (shopCategoriesQuery.isError) {
+      showToast(shopCategoriesQuery.error instanceof Error ? shopCategoriesQuery.error.message : 'Failed to load shop categories', 'error')
+    }
+  }, [shopCategoriesQuery.isError, shopCategoriesQuery.error, showToast])
+
   const shop = shopQuery.data
-  const allProducts = productsQuery.data ?? []
+  const productsData = productsQuery.data
+  const products = productsData?.products ?? []
   const collections = collectionsQuery.data ?? []
   const categories = categoriesQuery.data ?? []
+
+  const collectionCategoriesQueries = useQueries({
+    queries: collections.map(collection => ({
+      queryKey: ['shopCategories', shopId, collection.id, true],
+      queryFn: () => api.getShopCategories(parseInt(shopId!), collection.id, true),
+      enabled: !!shopId,
+    }))
+  })
+
+  const getCategoriesForCollection = (collectionId: number): Category[] => {
+    const query = collectionCategoriesQueries.find((_, idx) => collections[idx]?.id === collectionId)
+    return query?.data ?? categories
+  }
+
+  const totalPages = productsData?.totalPages ?? 0
+  const totalCount = productsData?.totalCount ?? 0
 
   const buildTree = <T extends { id: number; parentId: number | null; name: string }>(
     items: T[],
@@ -79,20 +118,9 @@ export function ShopFrontend() {
       }))
   }
 
-  const hasProductsOrDescendants = (category: Category, productIds: Set<number>): boolean => {
-    if (productIds.has(category.id)) return true
-    const children = categories.filter(c => c.parentId === category.id)
-    return children.some(child => hasProductsOrDescendants(child, productIds))
-  }
-
-  const categoriesWithProducts = useMemo(() => {
-    const ids = new Set(allProducts.flatMap(p => p.categoryIds))
-    return categories.filter(c => hasProductsOrDescendants(c, ids))
-  }, [categories, allProducts])
-
   const categoryTree = useMemo(
-    () => buildTree(categoriesWithProducts),
-    [categoriesWithProducts]
+    () => buildTree(categories),
+    [categories]
   )
 
   const getDescendantIds = (items: { id: number; parentId: number | null }[], id: number): number[] => {
@@ -112,34 +140,6 @@ export function ShopFrontend() {
     }
     return ancestors
   }
-
-  const getFilteredProducts = () => {
-    let products = allProducts
-
-    if (selectedCategory) {
-      const categoryAndDescendants = [
-        selectedCategory.id,
-        ...getDescendantIds(categories, selectedCategory.id)
-      ]
-      products = products.filter(p =>
-        p.categoryIds.some(catId => categoryAndDescendants.includes(catId))
-      )
-    }
-
-    if (selectedCollection) {
-      const allCollectionIds = [
-        selectedCollection.id,
-        ...getDescendantIds(collections, selectedCollection.id)
-      ]
-      const relevantCollections = collections.filter(c => allCollectionIds.includes(c.id))
-      const allProductIds = new Set(relevantCollections.flatMap(c => c.productIds))
-      products = products.filter(p => allProductIds.has(p.id))
-    }
-
-    return products
-  }
-
-  const filteredProducts = getFilteredProducts()
 
   const getCategoryPath = (categoryId: number): Category[] => {
     const path: Category[] = []
@@ -192,40 +192,6 @@ export function ShopFrontend() {
     [shopCollectionsWithProducts]
   )
 
-  const categoryPath = selectedCategory ? getCategoryPath(selectedCategory.id) : []
-  const collectionPath = selectedCollection ? getCollectionPath(selectedCollection.id) : []
-
-  const isCollectionActive = (collectionId: number): boolean => {
-    if (!selectedCollection) return false
-    return collectionPath.map(c => c.id).includes(collectionId)
-  }
-
-  const isCategoryActive = (categoryId: number, collectionId?: number): boolean => {
-    if (!selectedCategory || selectedCategory.id !== categoryId) return false
-    if (!collectionId && !selectedCollection) return true
-    if (!selectedCollection) return false
-    return selectedCollection.id === collectionId
-  }
-
-  const getCollectionProductIds = (collectionId: number): number[] => {
-    const descendantIds = getDescendantIds(collections, collectionId)
-    const allIds = [collectionId, ...descendantIds]
-    const relevantCollections = collections.filter(c => allIds.includes(c.id))
-    return relevantCollections.flatMap(c => c.productIds)
-  }
-
-  const getCollectionCategories = (collectionId: number): Category[] => {
-    const productIds = getCollectionProductIds(collectionId)
-    const collectionProducts = allProducts.filter(p => productIds.includes(p.id))
-    const categoryIds = new Set(
-      collectionProducts.flatMap(p => p.categoryIds).flatMap(id => [
-        id,
-        ...getDescendantIds(categories, id)
-      ])
-    )
-    return categories.filter(c => categoryIds.has(c.id))
-  }
-
   useEffect(() => {
     const collectionId = searchParams.get('collection')
     const categoryId = searchParams.get('category')
@@ -248,13 +214,40 @@ export function ShopFrontend() {
     } else {
       setSelectedCategory(null)
     }
+    setPage(1)
   }, [searchParams, collections, categories])
+
+  const categoryPath = selectedCategory ? getCategoryPath(selectedCategory.id) : []
+  const collectionPath = selectedCollection ? getCollectionPath(selectedCollection.id) : []
+
+  const isCollectionActive = (collectionId: number): boolean => {
+    if (!selectedCollection) return false
+    return collectionPath.map(c => c.id).includes(collectionId)
+  }
+
+  const isCategoryActive = (categoryId: number, collectionId?: number): boolean => {
+    if (!selectedCategory || selectedCategory.id !== categoryId) return false
+    if (!collectionId && !selectedCollection) return true
+    if (!selectedCollection) return false
+    return selectedCollection.id === collectionId
+  }
+
+  const getCollectionCategories = (collectionId?: number): Category[] => {
+    if (!selectedCollection && !collectionId) {
+      return categories
+    }
+    if (collectionId) {
+      return getCategoriesForCollection(collectionId)
+    }
+    return shopCategoriesQuery.data ?? categories
+  }
 
   const handleNavigate = (collectionId?: number, categoryId?: number) => {
     const params = new URLSearchParams()
     if (collectionId) params.set('collection', collectionId.toString())
     if (categoryId) params.set('category', categoryId.toString())
     navigate(`/shop/${shopId}?${params.toString()}`)
+    setPage(1)
   }
 
   return (
@@ -298,26 +291,30 @@ export function ShopFrontend() {
         <MainContent
           collectionPath={collectionPath}
           categoryPath={categoryPath}
-          products={filteredProducts}
+          products={products}
           onNavigate={handleNavigate}
           isLoading={productsQuery.isLoading}
+          page={page}
+          totalPages={totalPages}
+          totalCount={totalCount}
+          onPageChange={setPage}
         />
       </div>
     </div>
   )
 }
 
-interface NavMenuProps {
-  categoryTree: TreeNode<Category>[]
-  collectionTree: TreeNode<Collection>[]
-  hasCollections: boolean
-  selectedCategory: Category | null
-  onNavigate: (collectionId?: number, categoryId?: number) => void
-  getCollectionCategories: (id: number) => Category[]
-  isCollectionActive: (id: number) => boolean
-  isCategoryActive: (id: number, collectionId?: number) => boolean
-  isLoading: boolean
-}
+  interface NavMenuProps {
+    categoryTree: TreeNode<Category>[]
+    collectionTree: TreeNode<Collection>[]
+    hasCollections: boolean
+    selectedCategory: Category | null
+    onNavigate: (collectionId?: number, categoryId?: number) => void
+    getCollectionCategories: (collectionId?: number) => Category[]
+    isCollectionActive: (collectionId: number) => boolean
+    isCategoryActive: (categoryId: number, collectionId?: number) => boolean
+    isLoading: boolean
+  }
 
 function NavMenu({
   categoryTree,
@@ -457,7 +454,7 @@ interface SidebarProps {
   selectedCollection: Collection | null
   categoryPath: Category[]
   collectionPath: Collection[]
-  getCollectionCategories: (collectionId: number) => Category[]
+  getCollectionCategories: () => Category[]
   onSelectCategory: (category: Category | null) => void
   onSelectCollection: (collection: Collection | null) => void
   isLoading: boolean
@@ -490,7 +487,7 @@ function Sidebar({
   }
 
   const displayedCategories = selectedCollection
-    ? buildTree(getCollectionCategories(selectedCollection.id))
+    ? buildTree(getCollectionCategories())
     : categoryTree
 
   const renderTree = (
@@ -555,9 +552,13 @@ interface MainContentProps {
   products: Product[]
   onNavigate: (collectionId?: number, categoryId?: number) => void
   isLoading: boolean
+  page: number
+  totalPages: number
+  totalCount: number
+  onPageChange: (page: number) => void
 }
 
-function MainContent({ collectionPath, categoryPath, products, onNavigate, isLoading }: MainContentProps) {
+function MainContent({ collectionPath, categoryPath, products, onNavigate, isLoading, page, totalPages, totalCount, onPageChange }: MainContentProps) {
   const hasBreadcrumbs = collectionPath.length > 0 || categoryPath.length > 0
 
   return (
@@ -605,6 +606,28 @@ function MainContent({ collectionPath, categoryPath, products, onNavigate, isLoa
           <p className="empty-state">No products found</p>
         )}
       </div>
+
+      {totalPages > 1 && (
+        <div className="pagination">
+          <button
+            className="pagination-btn"
+            disabled={page <= 1}
+            onClick={() => onPageChange(page - 1)}
+          >
+            Previous
+          </button>
+          <span className="pagination-info">
+            Page {page} of {totalPages} ({totalCount} products)
+          </span>
+          <button
+            className="pagination-btn"
+            disabled={page >= totalPages}
+            onClick={() => onPageChange(page + 1)}
+          >
+            Next
+          </button>
+        </div>
+      )}
     </main>
   )
 }

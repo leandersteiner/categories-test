@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -237,28 +238,219 @@ func (s *Store) deleteShop(id int) error {
 	return nil
 }
 
-func (s *Store) getShopProducts(shopID int) []*Product {
-	shop, err := s.getShop(shopID)
-	if err != nil || len(shop.CollectionIDs) == 0 {
-		return s.getProducts()
-	}
+type PaginatedProducts struct {
+	Products   []*Product `json:"products"`
+	Page       int        `json:"page"`
+	Limit      int        `json:"limit"`
+	TotalCount int        `json:"totalCount"`
+	TotalPages int        `json:"totalPages"`
+}
 
-	productMap := make(map[int]bool)
-	for _, collID := range shop.CollectionIDs {
-		if coll, ok := s.Collections[collID]; ok {
-			for _, prodID := range coll.ProductIDs {
-				productMap[prodID] = true
-			}
+func (s *Store) getShopProducts(shopID int, collectionID, categoryID string, page, limit int) *PaginatedProducts {
+	shop, err := s.getShop(shopID)
+	if err != nil && len(shop.CollectionIDs) == 0 {
+		return &PaginatedProducts{
+			Products:   []*Product{},
+			Page:       page,
+			Limit:      limit,
+			TotalCount: 0,
+			TotalPages: 0,
 		}
 	}
 
+	productMap := make(map[int]bool)
+
+	// If specific collection is requested
+	if collectionID != "" {
+		if collID, err := strconv.Atoi(collectionID); err == nil {
+			// Get all descendant collection IDs
+			collIDs := s.getDescendantCollectionIDs(collID)
+			collIDs = append(collIDs, collID)
+			for _, cid := range collIDs {
+				if coll, ok := s.Collections[cid]; ok {
+					for _, prodID := range coll.ProductIDs {
+						productMap[prodID] = true
+					}
+				}
+			}
+		} else {
+			// Use shop's collections
+			for _, collID := range shop.CollectionIDs {
+				if coll, ok := s.Collections[collID]; ok {
+					for _, prodID := range coll.ProductIDs {
+						productMap[prodID] = true
+					}
+				}
+			}
+		}
+	} else if len(shop.CollectionIDs) > 0 {
+		// Use shop's collections
+		for _, collID := range shop.CollectionIDs {
+			if coll, ok := s.Collections[collID]; ok {
+				for _, prodID := range coll.ProductIDs {
+					productMap[prodID] = true
+				}
+			}
+		}
+	} else {
+		// Use all products
+		for prodID := range s.Products {
+			productMap[prodID] = true
+		}
+	}
+
+	// Filter by category if specified
+	if categoryID != "" {
+		if catID, err := strconv.Atoi(categoryID); err == nil {
+			catIDs := s.getDescendantCategoryIDs(catID)
+			catIDs = append(catIDs, catID)
+			filteredMap := make(map[int]bool)
+			for prodID := range productMap {
+				if prod, exists := s.Products[prodID]; exists {
+					for _, cID := range prod.CategoryIDs {
+						if contains(catIDs, cID) {
+							filteredMap[prodID] = true
+							break
+						}
+					}
+				}
+			}
+			productMap = filteredMap
+		}
+	}
+
+	// Convert to slice
 	products := make([]*Product, 0, len(productMap))
 	for prodID := range productMap {
 		if prod, exists := s.Products[prodID]; exists {
 			products = append(products, prod)
 		}
 	}
-	return products
+
+	// Calculate pagination
+	totalCount := len(products)
+	totalPages := (totalCount + limit - 1) / limit
+	start := (page - 1) * limit
+	end := start + limit
+	if start > totalCount {
+		start = totalCount
+	}
+	if end > totalCount {
+		end = totalCount
+	}
+
+	// Sort by ID
+	sort.Slice(products, func(i, j int) bool {
+		return products[i].ID < products[j].ID
+	})
+
+	pagedProducts := products
+	if start < end {
+		pagedProducts = products[start:end]
+	} else {
+		pagedProducts = []*Product{}
+	}
+
+	return &PaginatedProducts{
+		Products:   pagedProducts,
+		Page:       page,
+		Limit:      limit,
+		TotalCount: totalCount,
+		TotalPages: totalPages,
+	}
+}
+
+func contains(slice []int, item int) bool {
+	for _, v := range slice {
+		if v == item {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Store) getShopCategories(shopID int, collectionID string, directOnly bool) []*Category {
+	shop, _ := s.getShop(shopID)
+
+	productMap := make(map[int]bool)
+
+	if collectionID != "" {
+		if collID, err := strconv.Atoi(collectionID); err == nil {
+			if directOnly {
+				if coll, ok := s.Collections[collID]; ok {
+					for _, prodID := range coll.ProductIDs {
+						productMap[prodID] = true
+					}
+				}
+			} else {
+				collIDs := s.getDescendantCollectionIDs(collID)
+				collIDs = append(collIDs, collID)
+				for _, cid := range collIDs {
+					if coll, ok := s.Collections[cid]; ok {
+						for _, prodID := range coll.ProductIDs {
+							productMap[prodID] = true
+						}
+					}
+				}
+			}
+		}
+	} else if len(shop.CollectionIDs) > 0 {
+		for _, collID := range shop.CollectionIDs {
+			if coll, ok := s.Collections[collID]; ok {
+				for _, prodID := range coll.ProductIDs {
+					productMap[prodID] = true
+				}
+			}
+		}
+	} else {
+		for prodID := range s.Products {
+			productMap[prodID] = true
+		}
+	}
+
+	categoryMap := make(map[int]*Category)
+	for prodID := range productMap {
+		if prod, ok := s.Products[prodID]; ok {
+			for _, catID := range prod.CategoryIDs {
+				if cat, ok := s.Categories[catID]; ok {
+					categoryMap[catID] = cat
+				}
+			}
+		}
+	}
+
+	result := make([]*Category, 0, len(categoryMap))
+	for _, cat := range categoryMap {
+		result = append(result, cat)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].ID < result[j].ID
+	})
+
+	return result
+}
+
+func (s *Store) getDescendantCollectionIDs(parentID int) []int {
+	var result []int
+	for id, coll := range s.Collections {
+		if coll.ParentID != nil && *coll.ParentID == parentID {
+			result = append(result, id)
+			result = append(result, s.getDescendantCollectionIDs(id)...)
+		}
+	}
+	return result
+}
+
+func (s *Store) getDescendantCategoryIDs(parentID int) []int {
+	var result []int
+	for id, cat := range s.Categories {
+		if cat.ParentID != nil && *cat.ParentID == parentID {
+			result = append(result, id)
+			result = append(result, s.getDescendantCategoryIDs(id)...)
+		}
+	}
+	return result
 }
 
 func getProducts(w http.ResponseWriter, r *http.Request) {
@@ -481,7 +673,37 @@ func getShopProducts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, store.getShopProducts(id))
+	collectionID := r.URL.Query().Get("collection")
+	categoryID := r.URL.Query().Get("category")
+	page := 1
+	limit := 20
+
+	if p := r.URL.Query().Get("page"); p != "" {
+		if parsed, err := strconv.Atoi(p); err == nil && parsed > 0 {
+			page = parsed
+		}
+	}
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 100 {
+			limit = parsed
+		}
+	}
+
+	result := store.getShopProducts(id, collectionID, categoryID, page, limit)
+	writeJSON(w, result)
+}
+
+func getShopCategories(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.URL.Path)
+	if err != nil {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
+	collectionID := r.URL.Query().Get("collection")
+	directOnly := r.URL.Query().Get("direct") == "true"
+	result := store.getShopCategories(id, collectionID, directOnly)
+	writeJSON(w, result)
 }
 
 func handleProducts(w http.ResponseWriter, r *http.Request) {
@@ -574,6 +796,16 @@ func handleShopByID(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "GET":
 			getShopProducts(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+		return
+	}
+
+	if strings.HasSuffix(r.URL.Path, "/categories") {
+		switch r.Method {
+		case "GET":
+			getShopCategories(w, r)
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}

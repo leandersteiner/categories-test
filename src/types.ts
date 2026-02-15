@@ -6,6 +6,14 @@ export interface Product {
   categoryIds: number[]
 }
 
+export interface PaginatedProducts {
+  products: Product[]
+  page: number
+  limit: number
+  totalCount: number
+  totalPages: number
+}
+
 export interface Category {
   id: number
   name: string
