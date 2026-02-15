@@ -226,27 +226,32 @@ function ProductsTab({ products, categories }: { products: Product[]; categories
           <p>{products.length === 0 ? 'No products yet. Add your first product!' : 'No products match your search.'}</p>
         </div>
       ) : (
-        <div className="items-list">
+        <div className="data-grid">
+          <div className="grid-header">
+            <div className="grid-cell name">Name</div>
+            <div className="grid-cell categories">Categories</div>
+            <div className="grid-cell actions">Actions</div>
+          </div>
           {filteredProducts.map(product => (
-            <div key={product.id} className="item-card">
-              <div className="item-card-header">
-                <h3>{product.name}</h3>
-                <span className="price">${product.price.toFixed(2)}</span>
+            <div key={product.id} className="grid-row">
+              <div className="grid-cell name">
+                <span className="product-name">{product.name}</span>
               </div>
-              <p className="item-description">{product.description}</p>
-              <div className="category-chips">
-                {product.categoryIds.length > 0 ? (
-                  product.categoryIds.map(id => {
-                    const cat = categories.find(c => c.id === id)
-                    return cat ? <span key={id} className="category-chip">{cat.name}</span> : null
-                  })
-                ) : (
-                  <span className="category-chip empty">No categories</span>
-                )}
+              <div className="grid-cell categories">
+                <div className="category-chips">
+                  {product.categoryIds.length > 0 ? (
+                    product.categoryIds.map(id => {
+                      const cat = categories.find(c => c.id === id)
+                      return cat ? <span key={id} className="category-chip">{cat.name}</span> : null
+                    })
+                  ) : (
+                    <span className="category-chip empty">None</span>
+                  )}
+                </div>
               </div>
-              <div className="item-actions">
-                <button onClick={() => handleEdit(product)} className="btn-secondary" disabled={isMutating}>Edit</button>
-                <button onClick={() => deleteMutation.mutate(product.id)} className="btn-danger" disabled={isMutating}>Delete</button>
+              <div className="grid-cell actions">
+                <button onClick={() => handleEdit(product)} className="btn-secondary btn-sm" disabled={isMutating}>Edit</button>
+                <button onClick={() => deleteMutation.mutate(product.id)} className="btn-danger btn-sm" disabled={isMutating}>Delete</button>
               </div>
             </div>
           ))}
@@ -508,12 +513,19 @@ function ShopsTab({ shops, collections }: { shops: Shop[]; collections: Collecti
   const queryClient = useQueryClient()
   const [editingShop, setEditingShop] = useState<Shop | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedCollections, setSelectedCollections] = useState<number[]>([])
+
+  const filteredShops = shops.filter(shop =>
+    shop.name.toLowerCase().includes(searchQuery.toLowerCase())
+  )
 
   const createMutation = useMutation({
     mutationFn: api.createShop,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['shops'] })
       setShowForm(false)
+      setSelectedCollections([])
     },
   })
 
@@ -522,17 +534,36 @@ function ShopsTab({ shops, collections }: { shops: Shop[]; collections: Collecti
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['shops'] })
       setEditingShop(null)
+      setSelectedCollections([])
     },
   })
+
+  const handleEdit = (shop: Shop) => {
+    setEditingShop(shop)
+    setSelectedCollections(shop.collectionIds)
+  }
+
+  const handleCancel = () => {
+    setEditingShop(null)
+    setShowForm(false)
+    setSelectedCollections([])
+  }
+
+  const handleCollectionToggle = (collectionId: number) => {
+    setSelectedCollections(prev =>
+      prev.includes(collectionId)
+        ? prev.filter(id => id !== collectionId)
+        : [...prev, collectionId]
+    )
+  }
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const formData = new FormData(e.currentTarget)
-    const collectionIds = formData.getAll('collectionIds').map(Number)
 
     const shop = {
       name: formData.get('name') as string,
-      collectionIds,
+      collectionIds: selectedCollections,
     }
 
     if (editingShop) {
@@ -542,59 +573,97 @@ function ShopsTab({ shops, collections }: { shops: Shop[]; collections: Collecti
     }
   }
 
+  const isMutating = createMutation.isPending || updateMutation.isPending
+
   return (
     <div className="tab-content">
       <div className="tab-header">
         <h2>Shops</h2>
-        <button onClick={() => setShowForm(!showForm)} className="btn-primary">
+        <button onClick={() => setShowForm(!showForm)} className="btn-primary" disabled={isMutating}>
           {showForm ? 'Cancel' : 'Add Shop'}
         </button>
       </div>
 
+      <div className="search-filter-bar">
+        <input
+          type="text"
+          placeholder="Search shops..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="search-input"
+        />
+      </div>
+
       {(showForm || editingShop) && (
         <form onSubmit={handleSubmit} className="form">
-          <input name="name" placeholder="Shop Name" required defaultValue={editingShop?.name} />
-          <div className="checkbox-group">
-            <label>Collections (leave empty to show all products):</label>
-            {collections.map(coll => (
-              <label key={coll.id}>
-                <input
-                  type="checkbox"
-                  name="collectionIds"
-                  value={coll.id}
-                  defaultChecked={editingShop?.collectionIds.includes(coll.id)}
-                />
-                {coll.name}
-              </label>
-            ))}
+          <input name="name" placeholder="Shop Name" required defaultValue={editingShop?.name} disabled={isMutating} />
+          <div className="form-field">
+            <label className="form-label">Collections ({selectedCollections.length} selected):</label>
+            <p className="form-hint">Leave empty to show all products</p>
+            <div className="product-select-grid">
+              {collections.map(coll => (
+                <label key={coll.id} className="product-select-item">
+                  <input
+                    type="checkbox"
+                    checked={selectedCollections.includes(coll.id)}
+                    onChange={() => handleCollectionToggle(coll.id)}
+                    disabled={isMutating}
+                  />
+                  <span className="product-name">{coll.name}</span>
+                </label>
+              ))}
+              {collections.length === 0 && (
+                <p className="no-products">No collections available. Create collections first.</p>
+              )}
+            </div>
           </div>
           <div className="form-actions">
-            <button type="submit" className="btn-primary">
-              {editingShop ? 'Update' : 'Create'}
+            <button type="submit" className="btn-primary" disabled={isMutating}>
+              {isMutating ? 'Saving...' : editingShop ? 'Update' : 'Create'}
             </button>
-            <button type="button" onClick={() => { setEditingShop(null); setShowForm(false) }} className="btn-secondary">
+            <button type="button" onClick={handleCancel} className="btn-secondary" disabled={isMutating}>
               Cancel
             </button>
           </div>
         </form>
       )}
 
-      <div className="items-list">
-        {shops.map(shop => (
-          <div key={shop.id} className="item-card">
-            <h3>{shop.name}</h3>
-            <p className="meta">
-              Collections: {shop.collectionIds.length > 0
-                ? shop.collectionIds.map(id => collections.find(c => c.id === id)?.name).join(', ')
-                : 'All products (no collections)'}
-            </p>
-            <div className="item-actions">
-              <button onClick={() => setEditingShop(shop)} className="btn-secondary">Edit</button>
-              <a href={`/shop/${shop.id}`} className="btn-secondary">View Shop</a>
-            </div>
+      {filteredShops.length === 0 ? (
+        <div className="empty-state">
+          <p>{shops.length === 0 ? 'No shops yet. Add your first shop!' : 'No shops match your search.'}</p>
+        </div>
+      ) : (
+        <div className="data-grid">
+          <div className="grid-header">
+            <div className="grid-cell name">Name</div>
+            <div className="grid-cell collections">Collections</div>
+            <div className="grid-cell actions">Actions</div>
           </div>
-        ))}
-      </div>
+          {filteredShops.map(shop => (
+            <div key={shop.id} className="grid-row">
+              <div className="grid-cell name">
+                <span className="shop-name">{shop.name}</span>
+              </div>
+              <div className="grid-cell collections">
+                <div className="collection-chips">
+                  {shop.collectionIds.length > 0 ? (
+                    shop.collectionIds.map(id => {
+                      const coll = collections.find(c => c.id === id)
+                      return coll ? <span key={id} className="category-chip">{coll.name}</span> : null
+                    })
+                  ) : (
+                    <span className="category-chip empty">All products</span>
+                  )}
+                </div>
+              </div>
+              <div className="grid-cell actions">
+                <button onClick={() => handleEdit(shop)} className="btn-secondary btn-sm" disabled={isMutating}>Edit</button>
+                <a href={`/shop/${shop.id}`} className="btn-secondary btn-sm" target="_blank" rel="noopener noreferrer">View</a>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
