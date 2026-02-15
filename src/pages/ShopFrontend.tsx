@@ -254,8 +254,9 @@ export function ShopFrontend() {
           selectedCollection={selectedCollection}
           categoryPath={categoryPath}
           collectionPath={collectionPath}
+          getCollectionCategories={getCollectionCategories}
           onSelectCategory={(category) => category ? handleNavigate(selectedCollection?.id, category.id) : handleNavigate(selectedCollection?.id)}
-          onSelectCollection={(collection) => collection && handleNavigate(collection.id)}
+          onSelectCollection={(collection) => handleNavigate(collection?.id)}
         />
 
         <MainContent
@@ -406,6 +407,7 @@ interface SidebarProps {
   selectedCollection: Collection | null
   categoryPath: Category[]
   collectionPath: Collection[]
+  getCollectionCategories: (collectionId: number) => Category[]
   onSelectCategory: (category: Category | null) => void
   onSelectCollection: (collection: Collection | null) => void
 }
@@ -418,9 +420,27 @@ function Sidebar({
   selectedCollection,
   categoryPath,
   collectionPath,
+  getCollectionCategories,
   onSelectCategory,
   onSelectCollection,
 }: SidebarProps) {
+  const buildTree = <T extends { id: number; parentId: number | null; name: string }>(
+    items: T[],
+    parentId: number | null = null
+  ): TreeNode<T>[] => {
+    return items
+      .filter(item => item.parentId === parentId)
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(item => ({
+        ...item,
+        children: buildTree(items, item.id),
+      }))
+  }
+
+  const displayedCategories = selectedCollection
+    ? buildTree(getCollectionCategories(selectedCollection.id))
+    : categoryTree
+
   const renderTree = (
     items: TreeNode<Category | Collection>[],
     onSelect: (item: Category | Collection) => void,
@@ -458,14 +478,14 @@ function Sidebar({
           <section className="nav-section">
             <h2>Categories</h2>
             <button className="clear-btn" onClick={() => onSelectCategory(null)}>All</button>
-            {renderTree(categoryTree, onSelectCategory as (item: Category | Collection) => void, selectedCategory, categoryPath)}
+            {renderTree(displayedCategories, onSelectCategory as (item: Category | Collection) => void, selectedCategory, categoryPath)}
           </section>
         </>
       ) : (
         <section className="nav-section">
           <h2>Categories</h2>
           <button className="clear-btn" onClick={() => onSelectCategory(null)}>All</button>
-          {renderTree(categoryTree, onSelectCategory as (item: Category | Collection) => void, selectedCategory, categoryPath)}
+          {renderTree(displayedCategories, onSelectCategory as (item: Category | Collection) => void, selectedCategory, categoryPath)}
         </section>
       )}
     </aside>
@@ -480,30 +500,34 @@ interface MainContentProps {
 }
 
 function MainContent({ collectionPath, categoryPath, products, onNavigate }: MainContentProps) {
+  const hasBreadcrumbs = collectionPath.length > 0 || categoryPath.length > 0
+
   return (
     <main className="shop-main">
-      <div className="breadcrumb">
-        {collectionPath.map((coll, idx) => (
-          <span key={coll.id}>
-            {idx > 0 && " / "}
-            {idx === collectionPath.length - 1 && categoryPath.length === 0 ? (
-              coll.name
-            ) : (
-              <a href="#" onClick={(e) => { e.preventDefault(); onNavigate(coll.id) }}>{coll.name}</a>
-            )}
-          </span>
-        ))}
-        {categoryPath.map((cat, idx) => (
-          <span key={cat.id}>
-            {(collectionPath.length > 0 || idx > 0) && " / "}
-            {idx === categoryPath.length - 1 ? (
-              cat.name
-            ) : (
-              <a href="#" onClick={(e) => { e.preventDefault(); onNavigate(collectionPath[collectionPath.length - 1]?.id, cat.id) }}>{cat.name}</a>
-            )}
-          </span>
-        ))}
-      </div>
+      {hasBreadcrumbs && (
+        <div className="breadcrumb">
+          {collectionPath.map((coll, idx) => (
+            <span key={coll.id}>
+              {idx > 0 && " / "}
+              {idx === collectionPath.length - 1 && categoryPath.length === 0 ? (
+                coll.name
+              ) : (
+                <a href="#" onClick={(e) => { e.preventDefault(); onNavigate(coll.id) }}>{coll.name}</a>
+              )}
+            </span>
+          ))}
+          {categoryPath.map((cat, idx) => (
+            <span key={cat.id}>
+              {(collectionPath.length > 0 || idx > 0) && " / "}
+              {idx === categoryPath.length - 1 ? (
+                cat.name
+              ) : (
+                <a href="#" onClick={(e) => { e.preventDefault(); onNavigate(collectionPath[collectionPath.length - 1]?.id, cat.id) }}>{cat.name}</a>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="products-grid">
         {products.length > 0 ? (
