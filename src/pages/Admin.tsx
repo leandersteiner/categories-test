@@ -7,7 +7,6 @@ import { CategoryTreeManager } from '../components/CategoryTreeManager'
 import '../styles/Admin.css'
 
 export function Admin() {
-  const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<'products' | 'categories' | 'collections' | 'shops'>('products')
 
   const { data: products = [] } = useQuery({ queryKey: ['products'], queryFn: api.getProducts })
@@ -198,6 +197,13 @@ function CollectionsTab({ collections, products }: { collections: Collection[]; 
     },
   })
 
+  const deleteMutation = useMutation({
+    mutationFn: api.deleteCollection,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['collections'] })
+    },
+  })
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const formData = new FormData(e.currentTarget)
@@ -268,7 +274,10 @@ function CollectionsTab({ collections, products }: { collections: Collection[]; 
               Parent: {collection.parentId ? collections.find(c => c.id === collection.parentId)?.name : 'None'}
             </p>
             <p className="meta">Products: {collection.productIds.length}</p>
-            <button onClick={() => setEditingCollection(collection)} className="btn-secondary">Edit</button>
+            <div className="form-actions">
+              <button onClick={() => setEditingCollection(collection)} className="btn-secondary">Edit</button>
+              <button onClick={() => deleteMutation.mutate(collection.id)} className="btn-danger">Delete</button>
+            </div>
           </div>
         ))}
       </div>

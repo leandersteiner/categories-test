@@ -25,7 +25,6 @@
 }
 
 .tree-drop-zone {
-  min-height: 200px;
   border: 2px dashed transparent;
   border-radius: 6px;
   padding: 0.5rem;
