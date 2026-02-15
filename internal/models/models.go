@@ -26,3 +26,11 @@ type Shop struct {
 	Name          string `json:"name"`
 	CollectionIDs []int  `json:"collectionIds"`
 }
+
+type PaginatedProducts struct {
+	Products   []*Product `json:"products"`
+	Page       int        `json:"page"`
+	Limit      int        `json:"limit"`
+	TotalCount int        `json:"totalCount"`
+	TotalPages int        `json:"totalPages"`
+}

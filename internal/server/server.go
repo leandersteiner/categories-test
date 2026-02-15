@@ -59,6 +59,7 @@ func New(addr string) *Server {
 	mux.HandleFunc("POST /api/shops", h.CreateShop)
 	mux.HandleFunc("GET /api/shops/{id}", h.GetShop)
 	mux.HandleFunc("GET /api/shops/{id}/products", h.GetShopProducts)
+	mux.HandleFunc("GET /api/shops/{id}/categories", h.GetShopCategories)
 	mux.HandleFunc("PUT /api/shops/{id}", h.UpdateShop)
 	mux.HandleFunc("DELETE /api/shops/{id}", h.DeleteShop)
 

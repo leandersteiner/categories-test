@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"categories-test/internal/models"
@@ -81,5 +82,60 @@ func (h *Handler) GetShopProducts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.writeJSON(w, h.store.GetShopProducts(id))
+	collectionID := r.URL.Query().Get("collection")
+	categoryID := r.URL.Query().Get("category")
+	page := 1
+	limit := 10
+
+	if p := r.URL.Query().Get("page"); p != "" {
+		if parsed, err := strconv.Atoi(p); err == nil && parsed > 0 {
+			page = parsed
+		}
+	}
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	var collID *int
+	if collectionID != "" {
+		if parsed, err := strconv.Atoi(collectionID); err == nil {
+			collID = &parsed
+		}
+	}
+
+	var catID *int
+	if categoryID != "" {
+		if parsed, err := strconv.Atoi(categoryID); err == nil {
+			catID = &parsed
+		}
+	}
+
+	h.writeJSON(w, h.store.GetShopProducts(id, collID, catID, page, limit))
+}
+
+func (h *Handler) GetShopCategories(w http.ResponseWriter, r *http.Request) {
+	id, err := h.parseID(r.URL.Path)
+	if err != nil {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
+	if !strings.HasSuffix(r.URL.Path, "/categories") {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+
+	collectionID := r.URL.Query().Get("collection")
+	directOnly := r.URL.Query().Get("direct") == "true"
+
+	var collID *int
+	if collectionID != "" {
+		if parsed, err := strconv.Atoi(collectionID); err == nil {
+			collID = &parsed
+		}
+	}
+
+	h.writeJSON(w, h.store.GetShopCategories(id, collID, directOnly))
 }

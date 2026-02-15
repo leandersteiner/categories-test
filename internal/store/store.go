@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"sort"
 	"sync"
 
 	"categories-test/internal/models"
@@ -243,31 +244,184 @@ func (s *Store) DeleteShop(id int) error {
 	return nil
 }
 
-func (s *Store) GetShopProducts(shopID int) []*models.Product {
+func (s *Store) GetShopProducts(shopID int, collectionID *int, categoryID *int, page, limit int) *models.PaginatedProducts {
 	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	shop, ok := s.Shops[shopID]
-	if !ok || len(shop.CollectionIDs) == 0 {
-		s.mu.RUnlock()
-		return mapToSlice(s.Products)
+	if !ok {
+		return &models.PaginatedProducts{
+			Products:   []*models.Product{},
+			Page:       page,
+			Limit:      limit,
+			TotalCount: 0,
+			TotalPages: 0,
+		}
 	}
 
 	productMap := make(map[int]bool)
-	for _, collID := range shop.CollectionIDs {
-		if coll, ok := s.Collections[collID]; ok {
-			for _, prodID := range coll.ProductIDs {
-				productMap[prodID] = true
+
+	if collectionID != nil {
+		collIDs := []int{*collectionID}
+		collIDs = append(collIDs, s.getDescendantCollectionIDs(*collectionID)...)
+		for _, cid := range collIDs {
+			if coll, ok := s.Collections[cid]; ok {
+				for _, prodID := range coll.ProductIDs {
+					productMap[prodID] = true
+				}
 			}
 		}
+	} else if len(shop.CollectionIDs) > 0 {
+		for _, collID := range shop.CollectionIDs {
+			if coll, ok := s.Collections[collID]; ok {
+				for _, prodID := range coll.ProductIDs {
+					productMap[prodID] = true
+				}
+			}
+		}
+	} else {
+		for prodID := range s.Products {
+			productMap[prodID] = true
+		}
 	}
-	s.mu.RUnlock()
+
+	if categoryID != nil {
+		catIDs := s.getDescendantCategoryIDs(*categoryID)
+		catIDs = append(catIDs, *categoryID)
+		filteredMap := make(map[int]bool)
+		for prodID := range productMap {
+			if prod, exists := s.Products[prodID]; exists {
+				for _, cID := range prod.CategoryIDs {
+					if contains(catIDs, cID) {
+						filteredMap[prodID] = true
+						break
+					}
+				}
+			}
+		}
+		productMap = filteredMap
+	}
 
 	products := make([]*models.Product, 0, len(productMap))
-	s.mu.RLock()
 	for prodID := range productMap {
 		if prod, exists := s.Products[prodID]; exists {
 			products = append(products, prod)
 		}
 	}
-	s.mu.RUnlock()
-	return products
+
+	sort.Slice(products, func(i, j int) bool {
+		return products[i].ID < products[j].ID
+	})
+
+	totalCount := len(products)
+	totalPages := (totalCount + limit - 1) / limit
+	start := (page - 1) * limit
+	end := start + limit
+	if start > totalCount {
+		start = totalCount
+	}
+	if end > totalCount {
+		end = totalCount
+	}
+
+	pagedProducts := products
+	if start < end {
+		pagedProducts = products[start:end]
+	} else {
+		pagedProducts = []*models.Product{}
+	}
+
+	return &models.PaginatedProducts{
+		Products:   pagedProducts,
+		Page:       page,
+		Limit:      limit,
+		TotalCount: totalCount,
+		TotalPages: totalPages,
+	}
+}
+
+func contains(slice []int, item int) bool {
+	for _, v := range slice {
+		if v == item {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Store) getDescendantCategoryIDs(parentID int) []int {
+	var result []int
+	for id, cat := range s.Categories {
+		if cat.ParentID != nil && *cat.ParentID == parentID {
+			result = append(result, id)
+			result = append(result, s.getDescendantCategoryIDs(id)...)
+		}
+	}
+	return result
+}
+
+func (s *Store) GetShopCategories(shopID int, collectionID *int, directOnly bool) []*models.Category {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	shop, ok := s.Shops[shopID]
+	if !ok {
+		return nil
+	}
+
+	productMap := make(map[int]bool)
+
+	if collectionID != nil {
+		collIDs := []int{*collectionID}
+		if !directOnly {
+			collIDs = append(collIDs, s.getDescendantCollectionIDs(*collectionID)...)
+		}
+		for _, cid := range collIDs {
+			if coll, ok := s.Collections[cid]; ok {
+				for _, prodID := range coll.ProductIDs {
+					productMap[prodID] = true
+				}
+			}
+		}
+	} else if len(shop.CollectionIDs) > 0 {
+		for _, collID := range shop.CollectionIDs {
+			if coll, ok := s.Collections[collID]; ok {
+				for _, prodID := range coll.ProductIDs {
+					productMap[prodID] = true
+				}
+			}
+		}
+	} else {
+		for prodID := range s.Products {
+			productMap[prodID] = true
+		}
+	}
+
+	categoryMap := make(map[int]*models.Category)
+	for prodID := range productMap {
+		if prod, ok := s.Products[prodID]; ok {
+			for _, catID := range prod.CategoryIDs {
+				if cat, ok := s.Categories[catID]; ok {
+					categoryMap[catID] = cat
+				}
+			}
+		}
+	}
+
+	result := make([]*models.Category, 0, len(categoryMap))
+	for _, cat := range categoryMap {
+		result = append(result, cat)
+	}
+	return result
+}
+
+func (s *Store) getDescendantCollectionIDs(parentID int) []int {
+	var result []int
+	for id, coll := range s.Collections {
+		if coll.ParentID != nil && *coll.ParentID == parentID {
+			result = append(result, id)
+			result = append(result, s.getDescendantCollectionIDs(id)...)
+		}
+	}
+	return result
 }
