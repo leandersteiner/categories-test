@@ -99,7 +99,7 @@ export function ShopFrontend() {
 
   const getCategoriesForCollection = (collectionId: number): Category[] => {
     const query = collectionCategoriesQueries.find((_, idx) => collections[idx]?.id === collectionId)
-    return query?.data ?? categories
+    return query?.data ?? shopCategories
   }
 
   const totalPages = productsData?.totalPages ?? 0
@@ -118,9 +118,11 @@ export function ShopFrontend() {
       }))
   }
 
+  const shopCategories = shopCategoriesQuery.data ?? []
+
   const categoryTree = useMemo(
-    () => buildTree(categories),
-    [categories]
+    () => buildTree(shopCategories),
+    [shopCategories]
   )
 
   const getDescendantIds = (items: { id: number; parentId: number | null }[], id: number): number[] => {
@@ -234,12 +236,12 @@ export function ShopFrontend() {
 
   const getCollectionCategories = (collectionId?: number): Category[] => {
     if (!selectedCollection && !collectionId) {
-      return categories
+      return shopCategories
     }
     if (collectionId) {
       return getCategoriesForCollection(collectionId)
     }
-    return shopCategoriesQuery.data ?? categories
+    return shopCategoriesQuery.data ?? shopCategories
   }
 
   const handleNavigate = (collectionId?: number, categoryId?: number) => {

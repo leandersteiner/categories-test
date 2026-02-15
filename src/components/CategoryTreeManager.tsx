@@ -263,7 +263,6 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
             <div 
               key={category.id} 
               className={`category-item-wrapper depth-${level} ${isDragging ? 'dragging' : ''} ${hasChildNodes ? 'has-children' : ''} ${exactMatchIds.has(category.id) && exactMatchIds.size > 0 ? 'matching' : ''}`}
-              onClick={() => hasChildNodes && toggleExpand(category.id)}
             >
               <div
                 className={`category-card depth-${level} ${dragOverId === category.id && !dragOverAsChild ? 'drag-over-sibling' : ''} ${exactMatchIds.has(category.id) && exactMatchIds.size > 0 ? 'matching' : ''}`}
@@ -273,6 +272,7 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
                 onDragOver={(e) => handleDragOver(e, category.id, false)}
                 onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDrop(e, category.id, false)}
+                onClick={() => hasChildNodes && toggleExpand(category.id)}
               >
                 <div className={`category-card-main ${hasChildNodes ? 'has-children' : ''}`}>
                   {hasChildNodes && (
