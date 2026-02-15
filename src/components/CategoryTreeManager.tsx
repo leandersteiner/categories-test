@@ -100,23 +100,18 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
     e.preventDefault()
     e.stopPropagation()
 
-    console.log('Drop event triggered:', { draggedId, targetId, makeChild })
-
     setDragOverId(null)
     setDragOverAsChild(false)
 
     if (draggedId === null) {
-      console.log('No dragged ID, exiting')
       return
     }
 
     if (draggedId === targetId) {
-      console.log('Dropped on itself, exiting')
       setDraggedId(null)
       return
     }
 
-    // Prevent dropping a category into itself or its descendants
     const isDescendant = (parentId: number, childId: number): boolean => {
       const children = categories.filter(c => c.parentId === parentId)
       if (children.some(c => c.id === childId)) return true
@@ -131,7 +126,6 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
 
     const category = categories.find(c => c.id === draggedId)
     if (!category) {
-      console.log('Category not found:', draggedId)
       setDraggedId(null)
       return
     }
@@ -139,27 +133,18 @@ export function CategoryTreeManager({ categories }: CategoryTreeManagerProps) {
     let newParentId: number | null
 
     if (makeChild) {
-      // Make it a child of the target
       newParentId = targetId
-      console.log(`Making ${category.name} a child of`, targetId)
     } else if (targetId !== null) {
-      // Make it a sibling of the target (same parent)
       const targetCategory = categories.find(c => c.id === targetId)
       newParentId = targetCategory?.parentId ?? null
-      console.log(`Making ${category.name} a sibling of ${targetCategory?.name}, parent:`, newParentId)
     } else {
-      // Drop on root
       newParentId = null
-      console.log(`Making ${category.name} top-level`)
     }
 
     if (category.parentId === newParentId) {
-      console.log('Already at this level, no change needed')
       setDraggedId(null)
       return
     }
-
-    console.log('Updating category via API:', { id: category.id, name: category.name, parentId: newParentId })
 
     updateMutation.mutate({
       ...category,

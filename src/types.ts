@@ -24,3 +24,18 @@ export interface Shop {
   name: string
   collectionIds: number[]
 }
+
+export interface TreeNode<T> {
+  id: number
+  name: string
+  parentId: number | null
+  children: TreeNode<T>[]
+}
+
+export interface CategoryTreeNode extends TreeNode<Category> {
+  categoryIds?: number[]
+}
+
+export interface CollectionTreeNode extends TreeNode<Collection> {
+  productIds: number[]
+}

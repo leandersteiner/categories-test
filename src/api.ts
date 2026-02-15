@@ -2,134 +2,64 @@ import { Product, Category, Collection, Shop } from './types'
 
 const API_BASE = 'http://localhost:8080/api'
 
+async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    },
+  })
+  return res.json()
+}
+
 export const api = {
-  // Products
-  getProducts: async (): Promise<Product[]> => {
-    const res = await fetch(`${API_BASE}/products`)
-    return res.json()
-  },
+  getProducts: () => request<Product[]>('/products'),
 
-  createProduct: async (product: Omit<Product, 'id'>): Promise<Product> => {
-    const res = await fetch(`${API_BASE}/products`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(product),
-    })
-    return res.json()
-  },
+  createProduct: (product: Omit<Product, 'id'>) =>
+    request<Product>('/products', { method: 'POST', body: JSON.stringify(product) }),
 
-  updateProduct: async (product: Product): Promise<Product> => {
-    const res = await fetch(`${API_BASE}/products/${product.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(product),
-    })
-    return res.json()
-  },
+  updateProduct: (product: Product) =>
+    request<Product>(`/products/${product.id}`, { method: 'PUT', body: JSON.stringify(product) }),
 
-  deleteProduct: async (productId: number): Promise<void> => {
-    await fetch(`${API_BASE}/products/${productId}`, {
-      method: 'DELETE',
-    })
-  },
+  deleteProduct: (productId: number) =>
+    request<void>(`/products/${productId}`, { method: 'DELETE' }),
 
-  // Categories
-  getCategories: async (): Promise<Category[]> => {
-    const res = await fetch(`${API_BASE}/categories`)
-    return res.json()
-  },
+  getCategories: () => request<Category[]>('/categories'),
 
-  createCategory: async (category: Omit<Category, 'id'>): Promise<Category> => {
-    const res = await fetch(`${API_BASE}/categories`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(category),
-    })
-    return res.json()
-  },
+  createCategory: (category: Omit<Category, 'id'>) =>
+    request<Category>('/categories', { method: 'POST', body: JSON.stringify(category) }),
 
-  updateCategory: async (category: Category): Promise<Category> => {
-    const res = await fetch(`${API_BASE}/categories/${category.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(category),
-    })
-    return res.json()
-  },
+  updateCategory: (category: Category) =>
+    request<Category>(`/categories/${category.id}`, { method: 'PUT', body: JSON.stringify(category) }),
 
-  deleteCategory: async (categoryId: number): Promise<void> => {
-    await fetch(`${API_BASE}/categories/${categoryId}`, {
-      method: 'DELETE',
-    })
-  },
+  deleteCategory: (categoryId: number) =>
+    request<void>(`/categories/${categoryId}`, { method: 'DELETE' }),
 
-  // Collections
-  getCollections: async (): Promise<Collection[]> => {
-    const res = await fetch(`${API_BASE}/collections`)
-    return res.json()
-  },
+  getCollections: () => request<Collection[]>('/collections'),
 
-  createCollection: async (collection: Omit<Collection, 'id'>): Promise<Collection> => {
-    const res = await fetch(`${API_BASE}/collections`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(collection),
-    })
-    return res.json()
-  },
+  createCollection: (collection: Omit<Collection, 'id'>) =>
+    request<Collection>('/collections', { method: 'POST', body: JSON.stringify(collection) }),
 
-  updateCollection: async (collection: Collection): Promise<Collection> => {
-    const res = await fetch(`${API_BASE}/collections/${collection.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(collection),
-    })
-    return res.json()
-  },
+  updateCollection: (collection: Collection) =>
+    request<Collection>(`/collections/${collection.id}`, { method: 'PUT', body: JSON.stringify(collection) }),
 
-  deleteCollection: async (collectionId: number): Promise<void> => {
-    await fetch(`${API_BASE}/collections/${collectionId}`, {
-      method: 'DELETE',
-    })
-  },
+  deleteCollection: (collectionId: number) =>
+    request<void>(`/collections/${collectionId}`, { method: 'DELETE' }),
 
-  // Shops
-  getShops: async (): Promise<Shop[]> => {
-    const res = await fetch(`${API_BASE}/shops`)
-    return res.json()
-  },
+  getShops: () => request<Shop[]>('/shops'),
 
-  getShop: async (shopId: number): Promise<Shop> => {
-    const res = await fetch(`${API_BASE}/shops/${shopId}`)
-    return res.json()
-  },
+  getShop: (shopId: number) => request<Shop>(`/shops/${shopId}`),
 
-  createShop: async (shop: Omit<Shop, 'id'>): Promise<Shop> => {
-    const res = await fetch(`${API_BASE}/shops`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(shop),
-    })
-    return res.json()
-  },
+  createShop: (shop: Omit<Shop, 'id'>) =>
+    request<Shop>('/shops', { method: 'POST', body: JSON.stringify(shop) }),
 
-  updateShop: async (shop: Shop): Promise<Shop> => {
-    const res = await fetch(`${API_BASE}/shops/${shop.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(shop),
-    })
-    return res.json()
-  },
+  updateShop: (shop: Shop) =>
+    request<Shop>(`/shops/${shop.id}`, { method: 'PUT', body: JSON.stringify(shop) }),
 
-  deleteShop: async (shopId: number): Promise<void> => {
-    await fetch(`${API_BASE}/shops/${shopId}`, {
-      method: 'DELETE',
-    })
-  },
+  deleteShop: (shopId: number) =>
+    request<void>(`/shops/${shopId}`, { method: 'DELETE' }),
 
-  getShopProducts: async (shopId: number): Promise<Product[]> => {
-    const res = await fetch(`${API_BASE}/shops/${shopId}/products`)
-    return res.json()
-  },
+  getShopProducts: (shopId: number) =>
+    request<Product[]>(`/shops/${shopId}/products`),
 }

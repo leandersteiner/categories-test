@@ -8,7 +8,6 @@ import (
 	"strings"
 )
 
-// Models
 type Product struct {
 	ID          int     `json:"id"`
 	Name        string  `json:"name"`
@@ -36,7 +35,6 @@ type Shop struct {
 	CollectionIDs []int  `json:"collectionIds"`
 }
 
-// In-memory storage
 type Store struct {
 	Products    map[int]*Product
 	Categories  map[int]*Category
@@ -57,474 +55,505 @@ func NewStore() *Store {
 
 var store = NewStore()
 
-func enableCORS(w http.ResponseWriter) {
+func enableCORS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	if r.Method == "OPTIONS" {
+		return
+	}
 }
 
-// Product handlers
-func getProducts(w http.ResponseWriter, r *http.Request) {
-	products := make([]*Product, 0, len(store.Products))
-	for _, p := range store.Products {
-		products = append(products, p)
+func parseID(path string) (int, error) {
+	parts := strings.Split(path, "/")
+	if len(parts) < 4 {
+		return 0, http.ErrNoCookie
 	}
-	json.NewEncoder(w).Encode(products)
+	return strconv.Atoi(parts[3])
+}
+
+func readJSON(r *http.Request, v interface{}) error {
+	return json.NewDecoder(r.Body).Decode(v)
+}
+
+func writeJSON(w http.ResponseWriter, v interface{}) {
+	json.NewEncoder(w).Encode(v)
+}
+
+func mapToSlice[T any](m map[int]*T) []*T {
+	result := make([]*T, 0, len(m))
+	for _, v := range m {
+		result = append(result, v)
+	}
+	return result
+}
+
+func generateID(entityType string) int {
+	id := store.nextID[entityType]
+	store.nextID[entityType]++
+	return id
+}
+
+func ensureSlice[T any](slice []T) []T {
+	if slice == nil {
+		return []T{}
+	}
+	return slice
+}
+
+func (s *Store) getProducts() []*Product {
+	return mapToSlice(s.Products)
+}
+
+func (s *Store) createProduct(p *Product) *Product {
+	p.ID = generateID("product")
+	p.CategoryIDs = ensureSlice(p.CategoryIDs)
+	s.Products[p.ID] = p
+	return p
+}
+
+func (s *Store) updateProduct(p *Product) *Product {
+	p.CategoryIDs = ensureSlice(p.CategoryIDs)
+	s.Products[p.ID] = p
+	return p
+}
+
+func (s *Store) getCategories() []*Category {
+	return mapToSlice(s.Categories)
+}
+
+func (s *Store) createCategory(c *Category) *Category {
+	c.ID = generateID("category")
+	s.Categories[c.ID] = c
+	return c
+}
+
+func (s *Store) updateCategory(c *Category) *Category {
+	s.Categories[c.ID] = c
+	return c
+}
+
+func (s *Store) deleteCategory(id int) error {
+	if _, ok := s.Categories[id]; !ok {
+		return http.ErrNoCookie
+	}
+	delete(s.Categories, id)
+	return nil
+}
+
+func (s *Store) getCollections() []*Collection {
+	return mapToSlice(s.Collections)
+}
+
+func (s *Store) createCollection(c *Collection) *Collection {
+	c.ID = generateID("collection")
+	c.ProductIDs = ensureSlice(c.ProductIDs)
+	s.Collections[c.ID] = c
+	return c
+}
+
+func (s *Store) updateCollection(c *Collection) *Collection {
+	c.ProductIDs = ensureSlice(c.ProductIDs)
+	s.Collections[c.ID] = c
+	return c
+}
+
+func (s *Store) deleteCollection(id int) error {
+	if _, ok := s.Collections[id]; !ok {
+		return http.ErrNoCookie
+	}
+	delete(s.Collections, id)
+	return nil
+}
+
+func (s *Store) getShops() []*Shop {
+	return mapToSlice(s.Shops)
+}
+
+func (s *Store) getShop(id int) (*Shop, error) {
+	if shop, ok := s.Shops[id]; ok {
+		return shop, nil
+	}
+	return nil, http.ErrNoCookie
+}
+
+func (s *Store) createShop(shop *Shop) *Shop {
+	shop.ID = generateID("shop")
+	shop.CollectionIDs = ensureSlice(shop.CollectionIDs)
+	s.Shops[shop.ID] = shop
+	return shop
+}
+
+func (s *Store) updateShop(shop *Shop) *Shop {
+	shop.CollectionIDs = ensureSlice(shop.CollectionIDs)
+	s.Shops[shop.ID] = shop
+	return shop
+}
+
+func (s *Store) deleteShop(id int) error {
+	if _, ok := s.Shops[id]; !ok {
+		return http.ErrNoCookie
+	}
+	delete(s.Shops, id)
+	return nil
+}
+
+func (s *Store) getShopProducts(shopID int) []*Product {
+	shop, err := s.getShop(shopID)
+	if err != nil || len(shop.CollectionIDs) == 0 {
+		return s.getProducts()
+	}
+
+	productMap := make(map[int]bool)
+	for _, collID := range shop.CollectionIDs {
+		if coll, ok := s.Collections[collID]; ok {
+			for _, prodID := range coll.ProductIDs {
+				productMap[prodID] = true
+			}
+		}
+	}
+
+	products := make([]*Product, 0, len(productMap))
+	for prodID := range productMap {
+		if prod, exists := s.Products[prodID]; exists {
+			products = append(products, prod)
+		}
+	}
+	return products
+}
+
+func getProducts(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, store.getProducts())
 }
 
 func createProduct(w http.ResponseWriter, r *http.Request) {
 	var product Product
-	if err := json.NewDecoder(r.Body).Decode(&product); err != nil {
+	if err := readJSON(r, &product); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	product.ID = store.nextID["product"]
-	store.nextID["product"]++
-	if product.CategoryIDs == nil {
-		product.CategoryIDs = []int{}
-	}
-	store.Products[product.ID] = &product
+	created := store.createProduct(&product)
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(product)
+	writeJSON(w, created)
 }
 
 func updateProduct(w http.ResponseWriter, r *http.Request) {
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 4 {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
-
-	prodID, err := strconv.Atoi(pathParts[3])
+	id, err := parseID(r.URL.Path)
 	if err != nil {
-		http.Error(w, "Invalid product ID", http.StatusBadRequest)
+		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
 
 	var product Product
-	if err := json.NewDecoder(r.Body).Decode(&product); err != nil {
+	if err := readJSON(r, &product); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	product.ID = prodID
-	if product.CategoryIDs == nil {
-		product.CategoryIDs = []int{}
-	}
-	store.Products[product.ID] = &product
-	json.NewEncoder(w).Encode(product)
+	product.ID = id
+	writeJSON(w, store.updateProduct(&product))
 }
 
 func deleteProduct(w http.ResponseWriter, r *http.Request) {
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 4 {
+	id, err := parseID(r.URL.Path)
+	if err != nil {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
 
-	prodID, err := strconv.Atoi(pathParts[3])
-	if err != nil {
-		http.Error(w, "Invalid product ID", http.StatusBadRequest)
-		return
-	}
-
-	if _, exists := store.Products[prodID]; !exists {
+	if _, ok := store.Products[id]; !ok {
 		http.Error(w, "Product not found", http.StatusNotFound)
 		return
 	}
 
-	delete(store.Products, prodID)
+	delete(store.Products, id)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// Category handlers
 func getCategories(w http.ResponseWriter, r *http.Request) {
-	categories := make([]*Category, 0, len(store.Categories))
-	for _, c := range store.Categories {
-		categories = append(categories, c)
-	}
-	json.NewEncoder(w).Encode(categories)
+	writeJSON(w, store.getCategories())
 }
 
 func createCategory(w http.ResponseWriter, r *http.Request) {
 	var category Category
-	if err := json.NewDecoder(r.Body).Decode(&category); err != nil {
+	if err := readJSON(r, &category); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	category.ID = store.nextID["category"]
-	store.nextID["category"]++
-	store.Categories[category.ID] = &category
+	created := store.createCategory(&category)
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(category)
+	writeJSON(w, created)
 }
 
 func updateCategory(w http.ResponseWriter, r *http.Request) {
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 4 {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
-
-	catID, err := strconv.Atoi(pathParts[3])
+	id, err := parseID(r.URL.Path)
 	if err != nil {
-		http.Error(w, "Invalid category ID", http.StatusBadRequest)
+		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
 
 	var category Category
-	if err := json.NewDecoder(r.Body).Decode(&category); err != nil {
+	if err := readJSON(r, &category); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	category.ID = catID
-	store.Categories[category.ID] = &category
-	json.NewEncoder(w).Encode(category)
+	category.ID = id
+	writeJSON(w, store.updateCategory(&category))
 }
 
 func deleteCategory(w http.ResponseWriter, r *http.Request) {
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 4 {
+	id, err := parseID(r.URL.Path)
+	if err != nil {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
 
-	catID, err := strconv.Atoi(pathParts[3])
-	if err != nil {
-		http.Error(w, "Invalid category ID", http.StatusBadRequest)
-		return
-	}
-
-	if _, exists := store.Categories[catID]; !exists {
+	if err := store.deleteCategory(id); err != nil {
 		http.Error(w, "Category not found", http.StatusNotFound)
 		return
 	}
 
-	delete(store.Categories, catID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// Collection handlers
 func getCollections(w http.ResponseWriter, r *http.Request) {
-	collections := make([]*Collection, 0, len(store.Collections))
-	for _, c := range store.Collections {
-		collections = append(collections, c)
-	}
-	json.NewEncoder(w).Encode(collections)
+	writeJSON(w, store.getCollections())
 }
 
 func createCollection(w http.ResponseWriter, r *http.Request) {
 	var collection Collection
-	if err := json.NewDecoder(r.Body).Decode(&collection); err != nil {
+	if err := readJSON(r, &collection); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	collection.ID = store.nextID["collection"]
-	store.nextID["collection"]++
-	if collection.ProductIDs == nil {
-		collection.ProductIDs = []int{}
-	}
-	store.Collections[collection.ID] = &collection
+	created := store.createCollection(&collection)
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(collection)
+	writeJSON(w, created)
 }
 
 func updateCollection(w http.ResponseWriter, r *http.Request) {
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 4 {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
-
-	collID, err := strconv.Atoi(pathParts[3])
+	id, err := parseID(r.URL.Path)
 	if err != nil {
-		http.Error(w, "Invalid collection ID", http.StatusBadRequest)
+		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
 
 	var collection Collection
-	if err := json.NewDecoder(r.Body).Decode(&collection); err != nil {
+	if err := readJSON(r, &collection); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	collection.ID = collID
-	if collection.ProductIDs == nil {
-		collection.ProductIDs = []int{}
-	}
-	store.Collections[collection.ID] = &collection
-	json.NewEncoder(w).Encode(collection)
+	collection.ID = id
+	writeJSON(w, store.updateCollection(&collection))
 }
 
 func deleteCollection(w http.ResponseWriter, r *http.Request) {
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 4 {
+	id, err := parseID(r.URL.Path)
+	if err != nil {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
 
-	collID, err := strconv.Atoi(pathParts[3])
-	if err != nil {
-		http.Error(w, "Invalid collection ID", http.StatusBadRequest)
-		return
-	}
-
-	if _, exists := store.Collections[collID]; !exists {
+	if err := store.deleteCollection(id); err != nil {
 		http.Error(w, "Collection not found", http.StatusNotFound)
 		return
 	}
 
-	delete(store.Collections, collID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// Shop handlers
 func getShops(w http.ResponseWriter, r *http.Request) {
-	shops := make([]*Shop, 0, len(store.Shops))
-	for _, s := range store.Shops {
-		shops = append(shops, s)
+	writeJSON(w, store.getShops())
+}
+
+func getShop(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.URL.Path)
+	if err != nil {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
 	}
-	json.NewEncoder(w).Encode(shops)
+
+	shop, err := store.getShop(id)
+	if err != nil {
+		http.Error(w, "Shop not found", http.StatusNotFound)
+		return
+	}
+
+	writeJSON(w, shop)
 }
 
 func createShop(w http.ResponseWriter, r *http.Request) {
 	var shop Shop
-	if err := json.NewDecoder(r.Body).Decode(&shop); err != nil {
+	if err := readJSON(r, &shop); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	shop.ID = store.nextID["shop"]
-	store.nextID["shop"]++
-	if shop.CollectionIDs == nil {
-		shop.CollectionIDs = []int{}
-	}
-	store.Shops[shop.ID] = &shop
+	created := store.createShop(&shop)
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(shop)
+	writeJSON(w, created)
 }
 
 func updateShop(w http.ResponseWriter, r *http.Request) {
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 4 {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
-
-	shopID, err := strconv.Atoi(pathParts[3])
+	id, err := parseID(r.URL.Path)
 	if err != nil {
-		http.Error(w, "Invalid shop ID", http.StatusBadRequest)
+		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
 
 	var shop Shop
-	if err := json.NewDecoder(r.Body).Decode(&shop); err != nil {
+	if err := readJSON(r, &shop); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	shop.ID = shopID
-	if shop.CollectionIDs == nil {
-		shop.CollectionIDs = []int{}
-	}
-	store.Shops[shop.ID] = &shop
-	json.NewEncoder(w).Encode(shop)
+	shop.ID = id
+	writeJSON(w, store.updateShop(&shop))
 }
 
 func deleteShop(w http.ResponseWriter, r *http.Request) {
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 4 {
+	id, err := parseID(r.URL.Path)
+	if err != nil {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
 
-	shopID, err := strconv.Atoi(pathParts[3])
-	if err != nil {
-		http.Error(w, "Invalid shop ID", http.StatusBadRequest)
-		return
-	}
-
-	if _, exists := store.Shops[shopID]; !exists {
+	if err := store.deleteShop(id); err != nil {
 		http.Error(w, "Shop not found", http.StatusNotFound)
 		return
 	}
 
-	delete(store.Shops, shopID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func getShop(w http.ResponseWriter, r *http.Request) {
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 4 {
+func getShopProducts(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.URL.Path)
+	if err != nil {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
 
-	shopID, err := strconv.Atoi(pathParts[3])
-	if err != nil {
-		http.Error(w, "Invalid shop ID", http.StatusBadRequest)
-		return
-	}
-
-	shop, exists := store.Shops[shopID]
-	if !exists {
-		http.Error(w, "Shop not found", http.StatusNotFound)
-		return
-	}
-
-	json.NewEncoder(w).Encode(shop)
+	writeJSON(w, store.getShopProducts(id))
 }
 
-func getShopProducts(w http.ResponseWriter, r *http.Request) {
-
-	// Extract shop ID from path
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 4 {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
+func handleProducts(w http.ResponseWriter, r *http.Request) {
+	enableCORS(w, r)
+	switch r.Method {
+	case "GET":
+		getProducts(w, r)
+	case "POST":
+		createProduct(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
 
-	shopID, err := strconv.Atoi(pathParts[3])
-	if err != nil {
-		http.Error(w, "Invalid shop ID", http.StatusBadRequest)
-		return
+func handleProductByID(w http.ResponseWriter, r *http.Request) {
+	enableCORS(w, r)
+	switch r.Method {
+	case "PUT":
+		updateProduct(w, r)
+	case "DELETE":
+		deleteProduct(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
 
-	shop, exists := store.Shops[shopID]
-	if !exists {
-		http.Error(w, "Shop not found", http.StatusNotFound)
-		return
+func handleCategories(w http.ResponseWriter, r *http.Request) {
+	enableCORS(w, r)
+	switch r.Method {
+	case "GET":
+		getCategories(w, r)
+	case "POST":
+		createCategory(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
 
-	// If shop has collections, return products from those collections
-	if len(shop.CollectionIDs) > 0 {
-		productMap := make(map[int]bool)
-		for _, collID := range shop.CollectionIDs {
-			if coll, exists := store.Collections[collID]; exists {
-				for _, prodID := range coll.ProductIDs {
-					productMap[prodID] = true
-				}
-			}
+func handleCategoryByID(w http.ResponseWriter, r *http.Request) {
+	enableCORS(w, r)
+	switch r.Method {
+	case "PUT":
+		updateCategory(w, r)
+	case "DELETE":
+		deleteCategory(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func handleCollections(w http.ResponseWriter, r *http.Request) {
+	enableCORS(w, r)
+	switch r.Method {
+	case "GET":
+		getCollections(w, r)
+	case "POST":
+		createCollection(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func handleCollectionByID(w http.ResponseWriter, r *http.Request) {
+	enableCORS(w, r)
+	switch r.Method {
+	case "PUT":
+		updateCollection(w, r)
+	case "DELETE":
+		deleteCollection(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func handleShops(w http.ResponseWriter, r *http.Request) {
+	enableCORS(w, r)
+	switch r.Method {
+	case "GET":
+		getShops(w, r)
+	case "POST":
+		createShop(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func handleShopByID(w http.ResponseWriter, r *http.Request) {
+	enableCORS(w, r)
+	if strings.HasSuffix(r.URL.Path, "/products") {
+		switch r.Method {
+		case "GET":
+			getShopProducts(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
-
-		products := make([]*Product, 0)
-		for prodID := range productMap {
-			if prod, exists := store.Products[prodID]; exists {
-				products = append(products, prod)
-			}
-		}
-		json.NewEncoder(w).Encode(products)
 		return
 	}
 
-	// Otherwise return all products
-	products := make([]*Product, 0, len(store.Products))
-	for _, p := range store.Products {
-		products = append(products, p)
+	switch r.Method {
+	case "GET":
+		getShop(w, r)
+	case "PUT":
+		updateShop(w, r)
+	case "DELETE":
+		deleteShop(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
-	json.NewEncoder(w).Encode(products)
 }
 
 func main() {
-	http.HandleFunc("/api/products", func(w http.ResponseWriter, r *http.Request) {
-		enableCORS(w)
-		if r.Method == "OPTIONS" {
-			return
-		}
-		if r.Method == "GET" {
-			getProducts(w, r)
-		} else if r.Method == "POST" {
-			createProduct(w, r)
-		}
-	})
-
-	http.HandleFunc("/api/products/", func(w http.ResponseWriter, r *http.Request) {
-		enableCORS(w)
-		if r.Method == "OPTIONS" {
-			return
-		}
-		if r.Method == "PUT" {
-			updateProduct(w, r)
-		} else if r.Method == "DELETE" {
-			deleteProduct(w, r)
-		}
-	})
-
-	http.HandleFunc("/api/categories", func(w http.ResponseWriter, r *http.Request) {
-		enableCORS(w)
-		if r.Method == "OPTIONS" {
-			return
-		}
-		if r.Method == "GET" {
-			getCategories(w, r)
-		} else if r.Method == "POST" {
-			createCategory(w, r)
-		}
-	})
-
-	http.HandleFunc("/api/categories/", func(w http.ResponseWriter, r *http.Request) {
-		enableCORS(w)
-		if r.Method == "OPTIONS" {
-			return
-		}
-		if r.Method == "PUT" {
-			updateCategory(w, r)
-		} else if r.Method == "DELETE" {
-			deleteCategory(w, r)
-		}
-	})
-
-	http.HandleFunc("/api/collections", func(w http.ResponseWriter, r *http.Request) {
-		enableCORS(w)
-		if r.Method == "OPTIONS" {
-			return
-		}
-		if r.Method == "GET" {
-			getCollections(w, r)
-		} else if r.Method == "POST" {
-			createCollection(w, r)
-		}
-	})
-
-	http.HandleFunc("/api/collections/", func(w http.ResponseWriter, r *http.Request) {
-		enableCORS(w)
-		if r.Method == "OPTIONS" {
-			return
-		}
-		if r.Method == "PUT" {
-			updateCollection(w, r)
-		} else if r.Method == "DELETE" {
-			deleteCollection(w, r)
-		}
-	})
-
-	http.HandleFunc("/api/shops", func(w http.ResponseWriter, r *http.Request) {
-		enableCORS(w)
-		if r.Method == "OPTIONS" {
-			return
-		}
-		if r.Method == "GET" {
-			getShops(w, r)
-		} else if r.Method == "POST" {
-			createShop(w, r)
-		}
-	})
-
-	http.HandleFunc("/api/shops/", func(w http.ResponseWriter, r *http.Request) {
-		enableCORS(w)
-		if r.Method == "OPTIONS" {
-			return
-		}
-		if strings.HasSuffix(r.URL.Path, "/products") {
-			getShopProducts(w, r)
-		} else if r.Method == "GET" {
-			getShop(w, r)
-		} else if r.Method == "PUT" {
-			updateShop(w, r)
-		} else if r.Method == "DELETE" {
-			deleteShop(w, r)
-		}
-	})
+	http.HandleFunc("/api/products", handleProducts)
+	http.HandleFunc("/api/products/", handleProductByID)
+	http.HandleFunc("/api/categories", handleCategories)
+	http.HandleFunc("/api/categories/", handleCategoryByID)
+	http.HandleFunc("/api/collections", handleCollections)
+	http.HandleFunc("/api/collections/", handleCollectionByID)
+	http.HandleFunc("/api/shops", handleShops)
+	http.HandleFunc("/api/shops/", handleShopByID)
 
 	log.Println("Server starting on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
