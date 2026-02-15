@@ -62,10 +62,6 @@ export function ShopFrontend() {
 
   if (!shop) return <div>Loading...</div>
 
-  // Get shop collections
-  const shopCollections = collections.filter(c => shop.collectionIds.includes(c.id))
-  const hasCollections = shopCollections.length > 0
-
   // Build trees
   const buildTree = (items: any[], parentId: number | null = null): any[] => {
     return items
@@ -75,8 +71,6 @@ export function ShopFrontend() {
         children: buildTree(items, item.id),
       }))
   }
-
-  const collectionTree = buildTree(shopCollections)
 
   // Get all category IDs that have products
   const categoriesWithProducts = new Set(
@@ -118,12 +112,28 @@ export function ShopFrontend() {
     return ancestors
   }
 
+  // Get all descendant collection IDs for the shop's collections
+  const getAllDescendantCollectionIds = (parentId: number): number[] => {
+    const descendants: number[] = []
+    const children = collections.filter(c => c.parentId === parentId)
+    for (const child of children) {
+      descendants.push(child.id, ...getAllDescendantCollectionIds(child.id))
+    }
+    return descendants
+  }
+
   // Filter products
   const getFilteredProducts = () => {
     let products = allProducts
 
     if (selectedCollection) {
-      products = products.filter(p => selectedCollection.productIds.includes(p.id))
+      const allCollectionIds = [
+        selectedCollection.id,
+        ...getAllDescendantCollectionIds(selectedCollection.id)
+      ]
+      const allRelevantCollections = collections.filter(c => allCollectionIds.includes(c.id))
+      const allProductIds = new Set(allRelevantCollections.flatMap(c => c.productIds))
+      products = products.filter(p => allProductIds.has(p.id))
     }
 
     if (selectedCategory) {
@@ -163,23 +173,82 @@ export function ShopFrontend() {
 
   const categoryPath = selectedCategory ? getCategoryPath(selectedCategory.id) : []
 
+  // Get full collection path for breadcrumb
+  const getCollectionPath = (collectionId: number): Collection[] => {
+    const path: Collection[] = []
+    let currentId: number | null = collectionId
+
+    while (currentId) {
+      const collection = collections.find(c => c.id === currentId)
+      if (!collection) break
+      path.unshift(collection)
+      currentId = collection.parentId
+    }
+
+    return path
+  }
+
+  const allShopCollectionIds = new Set([
+    ...shop.collectionIds,
+    ...shop.collectionIds.flatMap(id => getAllDescendantCollectionIds(id))
+  ])
+
+  const shopCollections = collections.filter(c => allShopCollectionIds.has(c.id))
+  const hasCollections = shopCollections.length > 0
+
+  // Get all collection IDs that have products directly
+  const collectionsWithProducts = new Set(
+    shopCollections.filter(c => c.productIds.length > 0).map(c => c.id)
+  )
+
+  // Check if a collection has products or has descendants with products
+  const hasProductsOrDescendantsCollection = (collectionId: number): boolean => {
+    if (collectionsWithProducts.has(collectionId)) return true
+    const children = shopCollections.filter(c => c.parentId === collectionId)
+    return children.some(child => hasProductsOrDescendantsCollection(child.id))
+  }
+
+  // Filter collections to only show those with products
+  const shopCollectionsWithProducts = shopCollections.filter(c => hasProductsOrDescendantsCollection(c.id))
+  const collectionTreeFiltered = buildTree(shopCollectionsWithProducts)
+
+  const collectionPath = selectedCollection ? getCollectionPath(selectedCollection.id) : []
+
+  // Check if a collection is active (selected or is ancestor of selected)
+  const isCollectionActive = (collectionId: number): boolean => {
+    if (!selectedCollection) return false
+    const activeIds = collectionPath.map(c => c.id)
+    return activeIds.includes(collectionId)
+  }
+
+  // Check if a category is active in the current collection context
+  const isCategoryActiveInContext = (categoryId: number, collectionId?: number): boolean => {
+    if (!selectedCategory || selectedCategory.id !== categoryId) return false
+    if (!collectionId && !selectedCollection) return true
+    if (!selectedCollection) return false
+    
+    // Check if collectionId matches the selected collection or is a descendant
+    return selectedCollection.id === collectionId
+  }
+
   // Render navigation menu with dropdowns
   const renderNavMenu = () => {
     if (hasCollections) {
       // Collections as top level, categories in dropdown
       return (
         <nav className="shop-nav">
-          {collectionTree.map(collection => (
+          {collectionTreeFiltered.map(collection => (
             <div key={collection.id} className="nav-dropdown">
               <button
-                className={`nav-link ${selectedCollection?.id === collection.id && !selectedCategory ? 'active' : ''}`}
+                className={`nav-link ${isCollectionActive(collection.id) ? 'active' : ''}`}
                 onClick={() => handleNavigate(collection.id)}
               >
                 {collection.name}
               </button>
-              {categoryTree.length > 0 && (
+              {(categoryTree.length > 0 || collection.children.length > 0) && (
                 <div className="dropdown-content">
                   {categoryTree.map(category => renderCategoryDropdown(category, collection.id, 1))}
+                  {collection.children.length > 0 && collection.children.map((child: any) => renderCollectionDropdown(child, 2))}
                 </div>
               )}
             </div>
@@ -217,7 +286,7 @@ export function ShopFrontend() {
     return (
       <div key={category.id} className={`dropdown-item level-${level}`}>
         <button
-          className={`dropdown-link ${selectedCategory?.id === category.id ? 'active' : ''}`}
+          className={`dropdown-link ${isCategoryActiveInContext(category.id, collectionId) ? 'active' : ''}`}
           onClick={(e) => {
             e.stopPropagation()
             handleNavigate(collectionId, category.id)
@@ -234,18 +303,67 @@ export function ShopFrontend() {
     )
   }
 
-  const renderTree = (items: any[], onSelect: (item: any) => void, selected: any) => {
+  // Recursively render collection dropdown items (up to 3 levels)
+  const renderCollectionDropdown = (collection: any, level: number = 1) => {
+    if (level > 3) return null
+
+    const collectionProductIds = getCollectionProductIds(collection.id)
+    const collectionCategoriesWithProducts = categories.filter(c => {
+      const categoryProducts = allProducts.filter(p => collectionProductIds.includes(p.id))
+      const categoryAndDescendants = [c.id, ...getAllDescendantCategoryIds(c.id)]
+      return categoryProducts.some(p => p.categoryIds?.some(catId => categoryAndDescendants.includes(catId)))
+    })
+    const collectionCategoryTree = buildTree(collectionCategoriesWithProducts)
+
+    const hasSubItems = (collection.children.length > 0 || collectionCategoryTree.length > 0) && level < 3
+
+    return (
+      <div key={collection.id} className={`dropdown-item level-${level}`}>
+        <button
+          className={`dropdown-link ${isCollectionActive(collection.id) ? 'active' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation()
+            handleNavigate(collection.id)
+          }}
+        >
+          {collection.name}
+        </button>
+        {hasSubItems && (
+          <div className="dropdown-submenu">
+            {collectionCategoryTree.map((category: any) => renderCategoryDropdown(category, collection.id, level + 1))}
+            {collection.children.map((child: any) => renderCollectionDropdown(child, level + 1))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const getCollectionProductIds = (collectionId: number): number[] => {
+    const allDescendantIds = getAllDescendantCollectionIds(collectionId)
+    const allCollectionIds = [collectionId, ...allDescendantIds]
+    const relevantCollections = collections.filter(c => allCollectionIds.includes(c.id))
+    return relevantCollections.flatMap(c => c.productIds)
+  }
+
+  const renderTree = (items: any[], onSelect: (item: any) => void, selected: any, activePath?: any[]) => {
+    const pathToUse = activePath || collectionPath
+    const getActiveIds = () => {
+      if (!selected) return new Set<number>()
+      return new Set(pathToUse.map((item: any) => item.id))
+    }
+    const activeIds = getActiveIds()
+
     return (
       <ul className="nav-tree">
         {items.map(item => (
           <li key={item.id}>
             <button
-              className={`nav-item ${selected?.id === item.id ? 'active' : ''}`}
+              className={`nav-item ${activeIds.has(item.id) ? 'active' : ''}`}
               onClick={() => onSelect(item)}
             >
               {item.name}
             </button>
-            {item.children.length > 0 && renderTree(item.children, onSelect, selected)}
+            {item.children.length > 0 && renderTree(item.children, onSelect, selected, activePath)}
           </li>
         ))}
       </ul>
@@ -270,7 +388,7 @@ export function ShopFrontend() {
                 <button className="clear-btn" onClick={() => setSelectedCollection(null)}>
                   All
                 </button>
-                {renderTree(collectionTree, setSelectedCollection, selectedCollection)}
+                {renderTree(collectionTreeFiltered, setSelectedCollection, selectedCollection)}
               </section>
 
               <section className="nav-section">
@@ -278,7 +396,7 @@ export function ShopFrontend() {
                 <button className="clear-btn" onClick={() => setSelectedCategory(null)}>
                   All
                 </button>
-                {renderTree(categoryTree, setSelectedCategory, selectedCategory)}
+                {renderTree(categoryTree, setSelectedCategory, selectedCategory, categoryPath)}
               </section>
             </>
           ) : (
@@ -287,7 +405,7 @@ export function ShopFrontend() {
               <button className="clear-btn" onClick={() => setSelectedCategory(null)}>
                 All
               </button>
-              {renderTree(categoryTree, setSelectedCategory, selectedCategory)}
+              {renderTree(categoryTree, setSelectedCategory, selectedCategory, categoryPath)}
             </section>
           )}
         </aside>
