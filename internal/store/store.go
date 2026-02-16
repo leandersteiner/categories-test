@@ -1,12 +1,16 @@
 package store
 
 import (
+	"encoding/json"
 	"errors"
+	"os"
 	"sort"
 	"sync"
 
 	"categories-test/internal/models"
 )
+
+const dataFile = "data.json"
 
 var (
 	ErrNotFound = errors.New("not found")
@@ -21,6 +25,14 @@ type Store struct {
 	nextID      map[string]int
 }
 
+type storeData struct {
+	Products    map[int]*models.Product    `json:"products"`
+	Categories  map[int]*models.Category   `json:"categories"`
+	Collections map[int]*models.Collection `json:"collections"`
+	Shops       map[int]*models.Shop       `json:"shops"`
+	NextID      map[string]int             `json:"nextId"`
+}
+
 func New() *Store {
 	s := &Store{
 		Products:    make(map[int]*models.Product),
@@ -29,8 +41,44 @@ func New() *Store {
 		Shops:       make(map[int]*models.Shop),
 		nextID:      map[string]int{"product": 1, "category": 1, "collection": 1, "shop": 1},
 	}
+	if err := s.load(); err == nil {
+		return s
+	}
 	s.seed()
+	s.save()
 	return s
+}
+
+func (s *Store) load() error {
+	data, err := os.ReadFile(dataFile)
+	if err != nil {
+		return err
+	}
+	var sd storeData
+	if err := json.Unmarshal(data, &sd); err != nil {
+		return err
+	}
+	s.Products = sd.Products
+	s.Categories = sd.Categories
+	s.Collections = sd.Collections
+	s.Shops = sd.Shops
+	s.nextID = sd.NextID
+	return nil
+}
+
+func (s *Store) save() error {
+	sd := storeData{
+		Products:    s.Products,
+		Categories:  s.Categories,
+		Collections: s.Collections,
+		Shops:       s.Shops,
+		NextID:      s.nextID,
+	}
+	data, err := json.MarshalIndent(sd, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dataFile, data, 0644)
 }
 
 func (s *Store) seed() {
@@ -86,6 +134,7 @@ func (s *Store) CreateProduct(p *models.Product) *models.Product {
 	p.ID = s.generateID("product")
 	p.CategoryIDs = ensureSlice(p.CategoryIDs)
 	s.Products[p.ID] = p
+	s.save()
 	return p
 }
 
@@ -94,6 +143,7 @@ func (s *Store) UpdateProduct(p *models.Product) *models.Product {
 	defer s.mu.Unlock()
 	p.CategoryIDs = ensureSlice(p.CategoryIDs)
 	s.Products[p.ID] = p
+	s.save()
 	return p
 }
 
@@ -104,6 +154,7 @@ func (s *Store) DeleteProduct(id int) error {
 		return ErrNotFound
 	}
 	delete(s.Products, id)
+	s.save()
 	return nil
 }
 
@@ -118,6 +169,7 @@ func (s *Store) CreateCategory(c *models.Category) *models.Category {
 	defer s.mu.Unlock()
 	c.ID = s.generateID("category")
 	s.Categories[c.ID] = c
+	s.save()
 	return c
 }
 
@@ -125,6 +177,7 @@ func (s *Store) UpdateCategory(c *models.Category) *models.Category {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.Categories[c.ID] = c
+	s.save()
 	return c
 }
 
@@ -155,6 +208,7 @@ func (s *Store) DeleteCategory(id int) error {
 	for _, toDelete := range allIDs {
 		delete(s.Categories, toDelete)
 	}
+	s.save()
 	return nil
 }
 
@@ -181,6 +235,7 @@ func (s *Store) CreateCollection(c *models.Collection) *models.Collection {
 	c.ID = s.generateID("collection")
 	c.ProductIDs = ensureSlice(c.ProductIDs)
 	s.Collections[c.ID] = c
+	s.save()
 	return c
 }
 
@@ -189,6 +244,7 @@ func (s *Store) UpdateCollection(c *models.Collection) *models.Collection {
 	defer s.mu.Unlock()
 	c.ProductIDs = ensureSlice(c.ProductIDs)
 	s.Collections[c.ID] = c
+	s.save()
 	return c
 }
 
@@ -199,6 +255,7 @@ func (s *Store) DeleteCollection(id int) error {
 		return ErrNotFound
 	}
 	delete(s.Collections, id)
+	s.save()
 	return nil
 }
 
@@ -223,6 +280,7 @@ func (s *Store) CreateShop(shop *models.Shop) *models.Shop {
 	shop.ID = s.generateID("shop")
 	shop.CollectionIDs = ensureSlice(shop.CollectionIDs)
 	s.Shops[shop.ID] = shop
+	s.save()
 	return shop
 }
 
@@ -231,6 +289,7 @@ func (s *Store) UpdateShop(shop *models.Shop) *models.Shop {
 	defer s.mu.Unlock()
 	shop.CollectionIDs = ensureSlice(shop.CollectionIDs)
 	s.Shops[shop.ID] = shop
+	s.save()
 	return shop
 }
 
@@ -241,6 +300,7 @@ func (s *Store) DeleteShop(id int) error {
 		return ErrNotFound
 	}
 	delete(s.Shops, id)
+	s.save()
 	return nil
 }
 
