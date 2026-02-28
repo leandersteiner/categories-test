@@ -24,13 +24,20 @@ type productDTO struct {
 	CategoryIDs []int   `json:"categoryIds"`
 }
 
+func ensureIntSlice(value []int) []int {
+	if value == nil {
+		return []int{}
+	}
+	return value
+}
+
 func toProductDTO(p *Product) productDTO {
 	return productDTO{
 		ID:          p.ID,
 		Name:        p.Name,
 		Description: p.Description,
 		Price:       p.Price,
-		CategoryIDs: p.CategoryIDs,
+		CategoryIDs: ensureIntSlice(p.CategoryIDs),
 	}
 }
 
@@ -40,7 +47,7 @@ func fromProductDTO(dto productDTO) Product {
 		Name:        dto.Name,
 		Description: dto.Description,
 		Price:       dto.Price,
-		CategoryIDs: dto.CategoryIDs,
+		CategoryIDs: ensureIntSlice(dto.CategoryIDs),
 	}
 }
 

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -12,9 +13,9 @@ import (
 
 	"categories-test/internal/categories"
 	"categories-test/internal/collections"
+	"categories-test/internal/platform/db"
 	"categories-test/internal/products"
 	"categories-test/internal/shops"
-	"categories-test/internal/store"
 )
 
 func corsMiddleware(next http.Handler) http.Handler {
@@ -32,31 +33,34 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 type Server struct {
 	httpServer *http.Server
-	store      *store.Store
+	db         *db.Client
 }
 
-func New(addr string) *Server {
-	storage := store.New()
+func New(addr, dbPath string) (*Server, error) {
+	dbClient, err := db.OpenSQLite(dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("initialize database: %w", err)
+	}
 
 	productHandler := products.NewHTTPHandler(
-		products.NewCommands(storage),
-		products.NewQueries(storage),
+		products.NewCommands(products.NewSQLiteRepository(dbClient)),
+		products.NewQueries(products.NewSQLiteRepository(dbClient)),
 	)
 	categoryHandler := categories.NewHTTPHandler(
-		categories.NewCommands(storage),
-		categories.NewQueries(storage),
+		categories.NewCommands(categories.NewSQLiteRepository(dbClient)),
+		categories.NewQueries(categories.NewSQLiteRepository(dbClient)),
 	)
 	collectionHandler := collections.NewHTTPHandler(
-		collections.NewCommands(storage),
-		collections.NewQueries(storage),
+		collections.NewCommands(collections.NewSQLiteRepository(dbClient)),
+		collections.NewQueries(collections.NewSQLiteRepository(dbClient)),
 	)
 	shopHandler := shops.NewHTTPHandler(
-		shops.NewCommands(storage),
-		shops.NewQueries(storage),
+		shops.NewCommands(shops.NewSQLiteRepository(dbClient)),
+		shops.NewQueries(shops.NewSQLiteRepository(dbClient)),
 	)
 
 	s := &Server{
-		store: storage,
+		db: dbClient,
 	}
 
 	mux := http.NewServeMux()
@@ -94,7 +98,7 @@ func New(addr string) *Server {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	return s
+	return s, nil
 }
 
 func (s *Server) Start() error {
