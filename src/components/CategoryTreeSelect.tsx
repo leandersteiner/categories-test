@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Category } from '../types'
 import '../styles/CategoryTreeSelect.css'
 
@@ -17,32 +17,49 @@ export function CategoryTreeSelect({
   mode = 'single',
   excludeId,
 }: CategoryTreeSelectProps) {
-  // Get all ancestor IDs for selected items
+  const { childrenByParent, parentById } = useMemo(() => {
+    const children = new Map<number | null, Category[]>()
+    const parents = new Map<number, number | null>()
+
+    for (const category of categories) {
+      if (category.id === excludeId) continue
+      parents.set(category.id, category.parentId)
+      const siblings = children.get(category.parentId) ?? []
+      siblings.push(category)
+      children.set(category.parentId, siblings)
+    }
+
+    for (const siblings of children.values()) {
+      siblings.sort((a, b) => a.name.localeCompare(b.name))
+    }
+
+    return { childrenByParent: children, parentById: parents }
+  }, [categories, excludeId])
+
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
+
   const getAncestorIds = (categoryId: number): number[] => {
     const ancestors: number[] = []
-    const category = categories.find(c => c.id === categoryId)
+    let currentParent = parentById.get(categoryId) ?? null
 
-    if (category?.parentId) {
-      ancestors.push(category.parentId)
-      ancestors.push(...getAncestorIds(category.parentId))
+    while (currentParent !== null) {
+      ancestors.push(currentParent)
+      currentParent = parentById.get(currentParent) ?? null
     }
 
     return ancestors
   }
 
-  // Initialize expanded IDs with ancestors of all selected items
-  const getInitialExpandedIds = (): Set<number> => {
+  const initialExpandedIds = useMemo(() => {
     const allAncestors = new Set<number>()
-
     for (const selectedId of selectedIds) {
       const ancestors = getAncestorIds(selectedId)
-      ancestors.forEach(id => allAncestors.add(id))
+      ancestors.forEach((id) => allAncestors.add(id))
     }
-
     return allAncestors
-  }
+  }, [selectedIds, parentById])
 
-  const [expandedIds, setExpandedIds] = useState<Set<number>>(getInitialExpandedIds())
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(initialExpandedIds)
 
   // Update expanded IDs when selected items change
   useEffect(() => {
@@ -54,13 +71,7 @@ export function CategoryTreeSelect({
       }
       return newExpanded
     })
-  }, [selectedIds, categories])
-
-  const buildTree = (parentId: number | null = null): Category[] => {
-    return categories
-      .filter(cat => cat.parentId === parentId && cat.id !== excludeId)
-      .sort((a, b) => a.name.localeCompare(b.name))
-  }
+  }, [selectedIds, parentById])
 
   const toggleExpand = (categoryId: number) => {
     const newExpanded = new Set(expandedIds)
@@ -72,43 +83,33 @@ export function CategoryTreeSelect({
     setExpandedIds(newExpanded)
   }
 
-  const hasChildren = (categoryId: number) => {
-    return categories.some(cat => cat.parentId === categoryId && cat.id !== excludeId)
-  }
+  const selectedAncestorIds = useMemo(() => {
+    if (mode !== 'multiple') return new Set<number>()
 
-  // Get all descendant IDs for a given category
-  const getDescendantIds = (categoryId: number): number[] => {
-    const descendants: number[] = []
-    const children = categories.filter(c => c.parentId === categoryId && c.id !== excludeId)
-
-    for (const child of children) {
-      descendants.push(child.id)
-      descendants.push(...getDescendantIds(child.id))
+    const ancestors = new Set<number>()
+    for (const selectedId of selectedIds) {
+      let currentParent = parentById.get(selectedId) ?? null
+      while (currentParent !== null) {
+        ancestors.add(currentParent)
+        currentParent = parentById.get(currentParent) ?? null
+      }
     }
 
-    return descendants
-  }
+    return ancestors
+  }, [mode, parentById, selectedIds])
 
   // Check if category should appear checked (directly selected or has selected descendants)
   const isChecked = (categoryId: number): boolean => {
-    if (selectedIds.includes(categoryId)) return true
-
-    // In multiple mode, also check if any descendant is selected
-    if (mode === 'multiple') {
-      const descendants = getDescendantIds(categoryId)
-      return descendants.some(descId => selectedIds.includes(descId))
-    }
-
-    return false
+    return selectedSet.has(categoryId) || (mode === 'multiple' && selectedAncestorIds.has(categoryId))
   }
 
   // Check if category is directly selected (not just ancestor of selected)
   const isDirectlySelected = (categoryId: number): boolean => {
-    return selectedIds.includes(categoryId)
+    return selectedSet.has(categoryId)
   }
 
   const renderTree = (parentId: number | null = null, level: number = 0) => {
-    const items = buildTree(parentId)
+    const items = childrenByParent.get(parentId) ?? []
 
     if (items.length === 0) return null
 
@@ -118,7 +119,7 @@ export function CategoryTreeSelect({
           const isExpanded = expandedIds.has(category.id)
           const checked = isChecked(category.id)
           const directlySelected = isDirectlySelected(category.id)
-          const hasChildNodes = hasChildren(category.id)
+          const hasChildNodes = (childrenByParent.get(category.id) ?? []).length > 0
 
           return (
             <li key={category.id} className="tree-select-item">

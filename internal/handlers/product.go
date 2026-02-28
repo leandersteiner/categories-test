@@ -67,7 +67,11 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	created := h.store.CreateProduct(&product)
+	created, err := h.store.CreateProduct(&product)
+	if err != nil {
+		http.Error(w, "Failed to persist product", http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusCreated)
 	h.writeJSON(w, created)
 }
@@ -86,7 +90,12 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	product.ID = id
-	h.writeJSON(w, h.store.UpdateProduct(&product))
+	updated, err := h.store.UpdateProduct(&product)
+	if err != nil {
+		http.Error(w, "Failed to persist product", http.StatusInternalServerError)
+		return
+	}
+	h.writeJSON(w, updated)
 }
 
 func (h *Handler) DeleteProduct(w http.ResponseWriter, r *http.Request) {

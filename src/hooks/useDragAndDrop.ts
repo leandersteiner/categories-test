@@ -54,10 +54,13 @@ export function useDragAndDrop(): UseDragAndDropResult {
     }
   }, [])
 
-  const isDescendant = useCallback((parentId: number, childId: number, categories: Category[]): boolean => {
-    const children = categories.filter(c => c.parentId === parentId)
-    if (children.some(c => c.id === childId)) return true
-    return children.some(c => isDescendant(c.id, childId, categories))
+  const isDescendant = useCallback((parentId: number, childId: number, parentById: Map<number, number | null>): boolean => {
+    let currentParent = parentById.get(childId) ?? null
+    while (currentParent !== null) {
+      if (currentParent === parentId) return true
+      currentParent = parentById.get(currentParent) ?? null
+    }
+    return false
   }, [])
 
   const handleDrop = useCallback((e: React.DragEvent, targetId: number | null, makeChild: boolean = false, categories?: Category[], onMove?: (categoryId: number, newParentId: number | null) => void) => {
@@ -67,18 +70,23 @@ export function useDragAndDrop(): UseDragAndDropResult {
     setDragOverAsChild(false)
 
     if (draggedId === null || !categories || !onMove) return
+    const parentById = new Map<number, number | null>()
+    for (const category of categories) {
+      parentById.set(category.id, category.parentId)
+    }
+
     if (draggedId === targetId) {
       setDraggedId(null)
       return
     }
 
-    if (targetId !== null && makeChild && isDescendant(draggedId, targetId, categories)) {
+    if (targetId !== null && makeChild && isDescendant(draggedId, targetId, parentById)) {
       showToast('Cannot move a category into its own descendant', 'error')
       setDraggedId(null)
       return
     }
 
-    if (targetId !== null && !makeChild && isDescendant(draggedId, targetId, categories)) {
+    if (targetId !== null && !makeChild && isDescendant(draggedId, targetId, parentById)) {
       showToast('Cannot move a parent category next to its descendant', 'error')
       setDraggedId(null)
       return

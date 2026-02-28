@@ -128,23 +128,27 @@ func (s *Store) GetProducts() []*models.Product {
 	return mapToSlice(s.Products)
 }
 
-func (s *Store) CreateProduct(p *models.Product) *models.Product {
+func (s *Store) CreateProduct(p *models.Product) (*models.Product, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p.ID = s.generateID("product")
 	p.CategoryIDs = ensureSlice(p.CategoryIDs)
 	s.Products[p.ID] = p
-	s.save()
-	return p
+	if err := s.save(); err != nil {
+		return nil, err
+	}
+	return p, nil
 }
 
-func (s *Store) UpdateProduct(p *models.Product) *models.Product {
+func (s *Store) UpdateProduct(p *models.Product) (*models.Product, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p.CategoryIDs = ensureSlice(p.CategoryIDs)
 	s.Products[p.ID] = p
-	s.save()
-	return p
+	if err := s.save(); err != nil {
+		return nil, err
+	}
+	return p, nil
 }
 
 func (s *Store) DeleteProduct(id int) error {
@@ -154,7 +158,9 @@ func (s *Store) DeleteProduct(id int) error {
 		return ErrNotFound
 	}
 	delete(s.Products, id)
-	s.save()
+	if err := s.save(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -164,21 +170,25 @@ func (s *Store) GetCategories() []*models.Category {
 	return mapToSlice(s.Categories)
 }
 
-func (s *Store) CreateCategory(c *models.Category) *models.Category {
+func (s *Store) CreateCategory(c *models.Category) (*models.Category, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c.ID = s.generateID("category")
 	s.Categories[c.ID] = c
-	s.save()
-	return c
+	if err := s.save(); err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
-func (s *Store) UpdateCategory(c *models.Category) *models.Category {
+func (s *Store) UpdateCategory(c *models.Category) (*models.Category, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.Categories[c.ID] = c
-	s.save()
-	return c
+	if err := s.save(); err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 func (s *Store) DeleteCategory(id int) error {
@@ -208,7 +218,9 @@ func (s *Store) DeleteCategory(id int) error {
 	for _, toDelete := range allIDs {
 		delete(s.Categories, toDelete)
 	}
-	s.save()
+	if err := s.save(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -229,23 +241,27 @@ func (s *Store) GetCollections() []*models.Collection {
 	return mapToSlice(s.Collections)
 }
 
-func (s *Store) CreateCollection(c *models.Collection) *models.Collection {
+func (s *Store) CreateCollection(c *models.Collection) (*models.Collection, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c.ID = s.generateID("collection")
 	c.ProductIDs = ensureSlice(c.ProductIDs)
 	s.Collections[c.ID] = c
-	s.save()
-	return c
+	if err := s.save(); err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
-func (s *Store) UpdateCollection(c *models.Collection) *models.Collection {
+func (s *Store) UpdateCollection(c *models.Collection) (*models.Collection, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c.ProductIDs = ensureSlice(c.ProductIDs)
 	s.Collections[c.ID] = c
-	s.save()
-	return c
+	if err := s.save(); err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 func (s *Store) DeleteCollection(id int) error {
@@ -255,7 +271,9 @@ func (s *Store) DeleteCollection(id int) error {
 		return ErrNotFound
 	}
 	delete(s.Collections, id)
-	s.save()
+	if err := s.save(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -274,23 +292,27 @@ func (s *Store) GetShop(id int) (*models.Shop, error) {
 	return nil, ErrNotFound
 }
 
-func (s *Store) CreateShop(shop *models.Shop) *models.Shop {
+func (s *Store) CreateShop(shop *models.Shop) (*models.Shop, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	shop.ID = s.generateID("shop")
 	shop.CollectionIDs = ensureSlice(shop.CollectionIDs)
 	s.Shops[shop.ID] = shop
-	s.save()
-	return shop
+	if err := s.save(); err != nil {
+		return nil, err
+	}
+	return shop, nil
 }
 
-func (s *Store) UpdateShop(shop *models.Shop) *models.Shop {
+func (s *Store) UpdateShop(shop *models.Shop) (*models.Shop, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	shop.CollectionIDs = ensureSlice(shop.CollectionIDs)
 	s.Shops[shop.ID] = shop
-	s.save()
-	return shop
+	if err := s.save(); err != nil {
+		return nil, err
+	}
+	return shop, nil
 }
 
 func (s *Store) DeleteShop(id int) error {
@@ -300,7 +322,9 @@ func (s *Store) DeleteShop(id int) error {
 		return ErrNotFound
 	}
 	delete(s.Shops, id)
-	s.save()
+	if err := s.save(); err != nil {
+		return err
+	}
 	return nil
 }
 
