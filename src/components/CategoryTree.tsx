@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Category } from '../types'
 import { CategoryCard } from './CategoryCard'
 import { CategoryCreateInline } from './CategoryCreateInline'
@@ -16,6 +17,7 @@ interface CategoryTreeProps {
   newCategoryName: string
   parentId?: number | null
   level?: number
+  childrenByParent?: Map<number | null, Category[]>
   onToggleExpand: (categoryId: number) => void
   onDragStart: (e: React.DragEvent, categoryId: number) => void
   onDragEnd: () => void
@@ -47,6 +49,7 @@ export function CategoryTree({
   newCategoryName,
   parentId = null,
   level = 0,
+  childrenByParent: providedChildrenByParent,
   onToggleExpand,
   onDragStart,
   onDragEnd,
@@ -63,15 +66,26 @@ export function CategoryTree({
   onCancelCreate,
   onDelete,
 }: CategoryTreeProps) {
-  const buildTree = (pid: number | null): Category[] => {
-    return categories
-      .filter(cat => cat.parentId === pid)
-      .sort((a, b) => a.name.localeCompare(b.name))
-  }
+  const childrenByParent = useMemo(() => {
+    if (providedChildrenByParent) {
+      return providedChildrenByParent
+    }
 
-  const hasChildren = (categoryId: number): boolean => {
-    return categories.some(cat => cat.parentId === categoryId)
-  }
+    const byParent = new Map<number | null, Category[]>()
+    for (const category of categories) {
+      const siblings = byParent.get(category.parentId) ?? []
+      siblings.push(category)
+      byParent.set(category.parentId, siblings)
+    }
+
+    for (const siblings of byParent.values()) {
+      siblings.sort((a, b) => a.name.localeCompare(b.name))
+    }
+
+    return byParent
+  }, [categories, providedChildrenByParent])
+
+  const getChildren = (pid: number | null): Category[] => childrenByParent.get(pid) ?? []
 
   const renderChildren = (categoryId: number, childLevel: number) => () => (
     <CategoryTree
@@ -88,6 +102,7 @@ export function CategoryTree({
       newCategoryName={newCategoryName}
       parentId={categoryId}
       level={childLevel}
+      childrenByParent={childrenByParent}
       onToggleExpand={onToggleExpand}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
@@ -106,13 +121,14 @@ export function CategoryTree({
     />
   )
 
-  const items = buildTree(parentId)
+  const items = getChildren(parentId)
 
   return (
     <div className="category-items-list">
       {items.map(category => {
         const isExpanded = expandedIds.has(category.id)
-        const hasChildNodes = hasChildren(category.id)
+        const childNodes = getChildren(category.id)
+        const hasChildNodes = childNodes.length > 0
         const isDragging = draggedId === category.id
 
         return (
@@ -127,7 +143,7 @@ export function CategoryTree({
             dragOverId={dragOverId}
             dragOverAsChild={dragOverAsChild}
             exactMatch={exactMatchIds.has(category.id) && exactMatchIds.size > 0}
-            childCount={categories.filter(c => c.parentId === category.id).length}
+            childCount={childNodes.length}
             isMutating={isMutating}
             isEditing={editingCategory?.id === category.id}
             editingName={editingName}

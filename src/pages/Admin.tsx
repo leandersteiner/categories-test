@@ -1,15 +1,14 @@
-import { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
 import { Product, Category, Collection, Shop } from '../types'
 import { CategoryTreeSelect } from '../components/CategoryTreeSelect'
 import { CategoryTreeManager } from '../components/CategoryTreeManager'
-import { useToast } from '../components/Toast'
+import { useQueryErrorToast } from '../hooks/useQueryErrorToast'
 import '../styles/Admin.css'
 
 export function Admin() {
   const [activeTab, setActiveTab] = useState<'products' | 'categories' | 'collections' | 'shops'>('products')
-  const { showToast } = useToast()
 
   const productsQuery = useQuery({ queryKey: ['products'], queryFn: api.getProducts })
   const categoriesQuery = useQuery({ queryKey: ['categories'], queryFn: api.getCategories })
@@ -23,29 +22,10 @@ export function Admin() {
 
   const isLoading = productsQuery.isLoading || categoriesQuery.isLoading || collectionsQuery.isLoading || shopsQuery.isLoading
 
-  useEffect(() => {
-    if (productsQuery.isError) {
-      showToast(productsQuery.error instanceof Error ? productsQuery.error.message : 'Failed to load products', 'error')
-    }
-  }, [productsQuery.isError, productsQuery.error, showToast])
-
-  useEffect(() => {
-    if (categoriesQuery.isError) {
-      showToast(categoriesQuery.error instanceof Error ? categoriesQuery.error.message : 'Failed to load categories', 'error')
-    }
-  }, [categoriesQuery.isError, categoriesQuery.error, showToast])
-
-  useEffect(() => {
-    if (collectionsQuery.isError) {
-      showToast(collectionsQuery.error instanceof Error ? collectionsQuery.error.message : 'Failed to load collections', 'error')
-    }
-  }, [collectionsQuery.isError, collectionsQuery.error, showToast])
-
-  useEffect(() => {
-    if (shopsQuery.isError) {
-      showToast(shopsQuery.error instanceof Error ? shopsQuery.error.message : 'Failed to load shops', 'error')
-    }
-  }, [shopsQuery.isError, shopsQuery.error, showToast])
+  useQueryErrorToast(productsQuery, 'Failed to load products')
+  useQueryErrorToast(categoriesQuery, 'Failed to load categories')
+  useQueryErrorToast(collectionsQuery, 'Failed to load collections')
+  useQueryErrorToast(shopsQuery, 'Failed to load shops')
 
   return (
     <div className="admin">

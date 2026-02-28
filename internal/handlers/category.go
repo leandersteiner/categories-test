@@ -17,7 +17,11 @@ func (h *Handler) CreateCategory(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	created := h.store.CreateCategory(&category)
+	created, err := h.store.CreateCategory(&category)
+	if err != nil {
+		http.Error(w, "Failed to persist category", http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusCreated)
 	h.writeJSON(w, created)
 }
@@ -36,7 +40,12 @@ func (h *Handler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	category.ID = id
-	h.writeJSON(w, h.store.UpdateCategory(&category))
+	updated, err := h.store.UpdateCategory(&category)
+	if err != nil {
+		http.Error(w, "Failed to persist category", http.StatusInternalServerError)
+		return
+	}
+	h.writeJSON(w, updated)
 }
 
 func (h *Handler) DeleteCategory(w http.ResponseWriter, r *http.Request) {

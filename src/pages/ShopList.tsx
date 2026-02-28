@@ -1,24 +1,16 @@
-import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api'
-import { useToast } from '../components/Toast'
+import { useQueryErrorToast } from '../hooks/useQueryErrorToast'
 import '../styles/ShopList.css'
 
 export function ShopList() {
-  const { showToast } = useToast()
-  
   const shopsQuery = useQuery({
     queryKey: ['shops'],
     queryFn: api.getShops,
   })
 
   const shops = shopsQuery.data ?? []
-
-  useEffect(() => {
-    if (shopsQuery.isError) {
-      showToast(shopsQuery.error instanceof Error ? shopsQuery.error.message : 'Failed to load shops', 'error')
-    }
-  }, [shopsQuery.isError, shopsQuery.error, showToast])
+  useQueryErrorToast(shopsQuery, 'Failed to load shops')
 
   return (
     <div className="shop-list-page">

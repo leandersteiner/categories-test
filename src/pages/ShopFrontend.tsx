@@ -2,15 +2,15 @@ import { useState, useEffect, useMemo } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueries } from '@tanstack/react-query'
 import { api } from '../api'
-import { Category, Collection, Product } from '../types'
-import { useToast } from '../components/Toast'
+import { Category, Collection, Product, TreeNode } from '../types'
+import { useQueryErrorToast } from '../hooks/useQueryErrorToast'
+import { buildTree, getDescendantIds, getPathToRoot } from '../utils/tree'
 import '../styles/ShopFrontend.css'
 
 export function ShopFrontend() {
   const { shopId } = useParams<{ shopId: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const { showToast } = useToast()
 
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null)
@@ -53,35 +53,11 @@ export function ShopFrontend() {
     enabled: !!shopId,
   })
 
-  useEffect(() => {
-    if (shopQuery.isError) {
-      showToast(shopQuery.error instanceof Error ? shopQuery.error.message : 'Failed to load shop', 'error')
-    }
-  }, [shopQuery.isError, shopQuery.error, showToast])
-
-  useEffect(() => {
-    if (productsQuery.isError) {
-      showToast(productsQuery.error instanceof Error ? productsQuery.error.message : 'Failed to load products', 'error')
-    }
-  }, [productsQuery.isError, productsQuery.error, showToast])
-
-  useEffect(() => {
-    if (collectionsQuery.isError) {
-      showToast(collectionsQuery.error instanceof Error ? collectionsQuery.error.message : 'Failed to load collections', 'error')
-    }
-  }, [collectionsQuery.isError, collectionsQuery.error, showToast])
-
-  useEffect(() => {
-    if (categoriesQuery.isError) {
-      showToast(categoriesQuery.error instanceof Error ? categoriesQuery.error.message : 'Failed to load categories', 'error')
-    }
-  }, [categoriesQuery.isError, categoriesQuery.error, showToast])
-
-  useEffect(() => {
-    if (shopCategoriesQuery.isError) {
-      showToast(shopCategoriesQuery.error instanceof Error ? shopCategoriesQuery.error.message : 'Failed to load shop categories', 'error')
-    }
-  }, [shopCategoriesQuery.isError, shopCategoriesQuery.error, showToast])
+  useQueryErrorToast(shopQuery, 'Failed to load shop')
+  useQueryErrorToast(productsQuery, 'Failed to load products')
+  useQueryErrorToast(collectionsQuery, 'Failed to load collections')
+  useQueryErrorToast(categoriesQuery, 'Failed to load categories')
+  useQueryErrorToast(shopCategoriesQuery, 'Failed to load shop categories')
 
   const shop = shopQuery.data
   const productsData = productsQuery.data
@@ -105,71 +81,12 @@ export function ShopFrontend() {
   const totalPages = productsData?.totalPages ?? 0
   const totalCount = productsData?.totalCount ?? 0
 
-  const buildTree = <T extends { id: number; parentId: number | null; name: string }>(
-    items: T[],
-    parentId: number | null = null
-  ): TreeNode<T>[] => {
-    return items
-      .filter(item => item.parentId === parentId)
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map(item => ({
-        ...item,
-        children: buildTree(items, item.id),
-      }))
-  }
-
   const shopCategories = shopCategoriesQuery.data ?? []
 
   const categoryTree = useMemo(
     () => buildTree(shopCategories),
     [shopCategories]
   )
-
-  const getDescendantIds = (items: { id: number; parentId: number | null }[], id: number): number[] => {
-    const descendants: number[] = [id]
-    const children = items.filter(c => c.parentId === id)
-    for (const child of children) {
-      descendants.push(...getDescendantIds(items, child.id))
-    }
-    return descendants
-  }
-
-  const getAncestorIds = (items: { id: number; parentId: number | null }[], id: number): number[] => {
-    const ancestors: number[] = [id]
-    const item = items.find(c => c.id === id)
-    if (item?.parentId) {
-      ancestors.push(...getAncestorIds(items, item.parentId))
-    }
-    return ancestors
-  }
-
-  const getCategoryPath = (categoryId: number): Category[] => {
-    const path: Category[] = []
-    let currentId: number | null = categoryId
-
-    while (currentId) {
-      const category = categories.find(c => c.id === currentId)
-      if (!category) break
-      path.unshift(category)
-      currentId = category.parentId
-    }
-
-    return path
-  }
-
-  const getCollectionPath = (collectionId: number): Collection[] => {
-    const path: Collection[] = []
-    let currentId: number | null = collectionId
-
-    while (currentId) {
-      const collection = collections.find(c => c.id === currentId)
-      if (!collection) break
-      path.unshift(collection)
-      currentId = collection.parentId
-    }
-
-    return path
-  }
 
   const allShopCollectionIds = new Set([
     ...shop?.collectionIds ?? [],
@@ -219,8 +136,8 @@ export function ShopFrontend() {
     setPage(1)
   }, [searchParams, collections, categories])
 
-  const categoryPath = selectedCategory ? getCategoryPath(selectedCategory.id) : []
-  const collectionPath = selectedCollection ? getCollectionPath(selectedCollection.id) : []
+  const categoryPath = selectedCategory ? getPathToRoot(categories, selectedCategory.id) : []
+  const collectionPath = selectedCollection ? getPathToRoot(collections, selectedCollection.id) : []
 
   const isCollectionActive = (collectionId: number): boolean => {
     if (!selectedCollection) return false
@@ -306,17 +223,17 @@ export function ShopFrontend() {
   )
 }
 
-  interface NavMenuProps {
-    categoryTree: TreeNode<Category>[]
-    collectionTree: TreeNode<Collection>[]
-    hasCollections: boolean
-    selectedCategory: Category | null
-    onNavigate: (collectionId?: number, categoryId?: number) => void
-    getCollectionCategories: (collectionId?: number) => Category[]
-    isCollectionActive: (collectionId: number) => boolean
-    isCategoryActive: (categoryId: number, collectionId?: number) => boolean
-    isLoading: boolean
-  }
+interface NavMenuProps {
+  categoryTree: TreeNode<Category>[]
+  collectionTree: TreeNode<Collection>[]
+  hasCollections: boolean
+  selectedCategory: Category | null
+  onNavigate: (collectionId?: number, categoryId?: number) => void
+  getCollectionCategories: (collectionId?: number) => Category[]
+  isCollectionActive: (collectionId: number) => boolean
+  isCategoryActive: (categoryId: number, collectionId?: number) => boolean
+  isLoading: boolean
+}
 
 function NavMenu({
   categoryTree,
@@ -329,19 +246,6 @@ function NavMenu({
   isCategoryActive,
   isLoading,
 }: NavMenuProps) {
-  const buildTree = <T extends { id: number; parentId: number | null; name: string }>(
-    items: T[],
-    parentId: number | null = null
-  ): TreeNode<T>[] => {
-    return items
-      .filter(item => item.parentId === parentId)
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map(item => ({
-        ...item,
-        children: buildTree(items, item.id),
-      }))
-  }
-
   const renderCategoryDropdown = (category: TreeNode<Category>, collectionId?: number, level: number = 1) => {
     if (level > 3) return null
     return (
@@ -475,19 +379,6 @@ function Sidebar({
   onSelectCollection,
   isLoading,
 }: SidebarProps) {
-  const buildTree = <T extends { id: number; parentId: number | null; name: string }>(
-    items: T[],
-    parentId: number | null = null
-  ): TreeNode<T>[] => {
-    return items
-      .filter(item => item.parentId === parentId)
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map(item => ({
-        ...item,
-        children: buildTree(items, item.id),
-      }))
-  }
-
   const displayedCategories = selectedCollection
     ? buildTree(getCollectionCategories())
     : categoryTree
@@ -632,11 +523,4 @@ function MainContent({ collectionPath, categoryPath, products, onNavigate, isLoa
       )}
     </main>
   )
-}
-
-interface TreeNode<T> {
-  id: number
-  name: string
-  parentId: number | null
-  children: TreeNode<T>[]
 }

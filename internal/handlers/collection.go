@@ -16,7 +16,11 @@ func (h *Handler) CreateCollection(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	created := h.store.CreateCollection(&collection)
+	created, err := h.store.CreateCollection(&collection)
+	if err != nil {
+		http.Error(w, "Failed to persist collection", http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusCreated)
 	h.writeJSON(w, created)
 }
@@ -35,7 +39,12 @@ func (h *Handler) UpdateCollection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	collection.ID = id
-	h.writeJSON(w, h.store.UpdateCollection(&collection))
+	updated, err := h.store.UpdateCollection(&collection)
+	if err != nil {
+		http.Error(w, "Failed to persist collection", http.StatusInternalServerError)
+		return
+	}
+	h.writeJSON(w, updated)
 }
 
 func (h *Handler) DeleteCollection(w http.ResponseWriter, r *http.Request) {
