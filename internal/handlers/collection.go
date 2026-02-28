@@ -1,22 +1,24 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
-	"categories-test/internal/models"
+	"categories-test/internal/domain/entity"
+	domainerrors "categories-test/internal/domain/errors"
 )
 
 func (h *Handler) ListCollections(w http.ResponseWriter, r *http.Request) {
-	h.writeJSON(w, h.store.GetCollections())
+	h.writeJSON(w, h.queries.ListCollections())
 }
 
 func (h *Handler) CreateCollection(w http.ResponseWriter, r *http.Request) {
-	var collection models.Collection
+	var collection entity.Collection
 	if err := h.readJSON(r, &collection); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	created, err := h.store.CreateCollection(&collection)
+	created, err := h.commands.CreateCollection(&collection)
 	if err != nil {
 		http.Error(w, "Failed to persist collection", http.StatusInternalServerError)
 		return
@@ -32,14 +34,14 @@ func (h *Handler) UpdateCollection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var collection models.Collection
+	var collection entity.Collection
 	if err := h.readJSON(r, &collection); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	collection.ID = id
-	updated, err := h.store.UpdateCollection(&collection)
+	updated, err := h.commands.UpdateCollection(&collection)
 	if err != nil {
 		http.Error(w, "Failed to persist collection", http.StatusInternalServerError)
 		return
@@ -54,8 +56,12 @@ func (h *Handler) DeleteCollection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.store.DeleteCollection(id); err != nil {
-		http.Error(w, "Collection not found", http.StatusNotFound)
+	if err := h.commands.DeleteCollection(id); err != nil {
+		if errors.Is(err, domainerrors.ErrNotFound) {
+			http.Error(w, "Collection not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "Failed to persist collection", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

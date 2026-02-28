@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"categories-test/internal/application/commands"
+	"categories-test/internal/application/queries"
 	"categories-test/internal/handlers"
 	"categories-test/internal/store"
 )
@@ -33,12 +35,16 @@ type Server struct {
 }
 
 func New(addr string) *Server {
+	storage := store.New()
+	commandService := commands.NewService(storage, storage, storage, storage)
+	queryService := queries.NewService(storage, storage, storage, storage)
+
 	s := &Server{
-		store: store.New(),
+		store: storage,
 	}
 
 	mux := http.NewServeMux()
-	h := handlers.New(s.store)
+	h := handlers.New(commandService, queryService)
 
 	mux.HandleFunc("GET /api/products", h.ListProducts)
 	mux.HandleFunc("POST /api/products", h.CreateProduct)

@@ -1,15 +1,17 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"categories-test/internal/models"
+	"categories-test/internal/domain/entity"
+	domainerrors "categories-test/internal/domain/errors"
 )
 
 func (h *Handler) ListShops(w http.ResponseWriter, r *http.Request) {
-	h.writeJSON(w, h.store.GetShops())
+	h.writeJSON(w, h.queries.ListShops())
 }
 
 func (h *Handler) GetShop(w http.ResponseWriter, r *http.Request) {
@@ -19,9 +21,13 @@ func (h *Handler) GetShop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	shop, err := h.store.GetShop(id)
+	shop, err := h.queries.GetShop(id)
 	if err != nil {
-		http.Error(w, "Shop not found", http.StatusNotFound)
+		if errors.Is(err, domainerrors.ErrNotFound) {
+			http.Error(w, "Shop not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "Failed to load shop", http.StatusInternalServerError)
 		return
 	}
 
@@ -29,12 +35,12 @@ func (h *Handler) GetShop(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreateShop(w http.ResponseWriter, r *http.Request) {
-	var shop models.Shop
+	var shop entity.Shop
 	if err := h.readJSON(r, &shop); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	created, err := h.store.CreateShop(&shop)
+	created, err := h.commands.CreateShop(&shop)
 	if err != nil {
 		http.Error(w, "Failed to persist shop", http.StatusInternalServerError)
 		return
@@ -50,14 +56,14 @@ func (h *Handler) UpdateShop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var shop models.Shop
+	var shop entity.Shop
 	if err := h.readJSON(r, &shop); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	shop.ID = id
-	updated, err := h.store.UpdateShop(&shop)
+	updated, err := h.commands.UpdateShop(&shop)
 	if err != nil {
 		http.Error(w, "Failed to persist shop", http.StatusInternalServerError)
 		return
@@ -72,8 +78,12 @@ func (h *Handler) DeleteShop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.store.DeleteShop(id); err != nil {
-		http.Error(w, "Shop not found", http.StatusNotFound)
+	if err := h.commands.DeleteShop(id); err != nil {
+		if errors.Is(err, domainerrors.ErrNotFound) {
+			http.Error(w, "Shop not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "Failed to persist shop", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -121,7 +131,7 @@ func (h *Handler) GetShopProducts(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.writeJSON(w, h.store.GetShopProducts(id, collID, catID, page, limit))
+	h.writeJSON(w, h.queries.GetShopProducts(id, collID, catID, page, limit))
 }
 
 func (h *Handler) GetShopCategories(w http.ResponseWriter, r *http.Request) {
@@ -146,5 +156,5 @@ func (h *Handler) GetShopCategories(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.writeJSON(w, h.store.GetShopCategories(id, collID, directOnly))
+	h.writeJSON(w, h.queries.GetShopCategories(id, collID, directOnly))
 }

@@ -6,16 +6,22 @@ import (
 	"net/http"
 	"strconv"
 
-	"categories-test/internal/models"
-	"categories-test/internal/store"
+	"categories-test/internal/application/commands"
+	"categories-test/internal/application/queries"
+	"categories-test/internal/domain/entity"
+	domainerrors "categories-test/internal/domain/errors"
 )
 
 type Handler struct {
-	store *store.Store
+	commands *commands.Service
+	queries  *queries.Service
 }
 
-func New(store *store.Store) *Handler {
-	return &Handler{store: store}
+func New(commandService *commands.Service, queryService *queries.Service) *Handler {
+	return &Handler{
+		commands: commandService,
+		queries:  queryService,
+	}
 }
 
 func (h *Handler) readJSON(r *http.Request, v interface{}) error {
@@ -58,16 +64,16 @@ func splitPath(path string) []string {
 }
 
 func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) {
-	h.writeJSON(w, h.store.GetProducts())
+	h.writeJSON(w, h.queries.ListProducts())
 }
 
 func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
-	var product models.Product
+	var product entity.Product
 	if err := h.readJSON(r, &product); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	created, err := h.store.CreateProduct(&product)
+	created, err := h.commands.CreateProduct(&product)
 	if err != nil {
 		http.Error(w, "Failed to persist product", http.StatusInternalServerError)
 		return
@@ -83,14 +89,14 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var product models.Product
+	var product entity.Product
 	if err := h.readJSON(r, &product); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	product.ID = id
-	updated, err := h.store.UpdateProduct(&product)
+	updated, err := h.commands.UpdateProduct(&product)
 	if err != nil {
 		http.Error(w, "Failed to persist product", http.StatusInternalServerError)
 		return
@@ -105,9 +111,17 @@ func (h *Handler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.store.DeleteProduct(id); err != nil {
-		http.Error(w, "Product not found", http.StatusNotFound)
+	if err := h.commands.DeleteProduct(id); err != nil {
+		if errors.Is(err, domainerrors.ErrNotFound) {
+			http.Error(w, "Product not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "Failed to persist product", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func isNotFound(err error) bool {
+	return errors.Is(err, domainerrors.ErrNotFound)
 }
