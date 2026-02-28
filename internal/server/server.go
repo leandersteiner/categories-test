@@ -10,9 +10,10 @@ import (
 	"syscall"
 	"time"
 
-	"categories-test/internal/application/commands"
-	"categories-test/internal/application/queries"
-	"categories-test/internal/handlers"
+	"categories-test/internal/features/categories"
+	"categories-test/internal/features/collections"
+	"categories-test/internal/features/products"
+	"categories-test/internal/features/shops"
 	"categories-test/internal/store"
 )
 
@@ -36,38 +37,52 @@ type Server struct {
 
 func New(addr string) *Server {
 	storage := store.New()
-	commandService := commands.NewService(storage, storage, storage, storage)
-	queryService := queries.NewService(storage, storage, storage, storage)
+
+	productHandler := products.NewHTTPHandler(
+		products.NewCommands(storage),
+		products.NewQueries(storage),
+	)
+	categoryHandler := categories.NewHTTPHandler(
+		categories.NewCommands(storage),
+		categories.NewQueries(storage),
+	)
+	collectionHandler := collections.NewHTTPHandler(
+		collections.NewCommands(storage),
+		collections.NewQueries(storage),
+	)
+	shopHandler := shops.NewHTTPHandler(
+		shops.NewCommands(storage),
+		shops.NewQueries(storage),
+	)
 
 	s := &Server{
 		store: storage,
 	}
 
 	mux := http.NewServeMux()
-	h := handlers.New(commandService, queryService)
 
-	mux.HandleFunc("GET /api/products", h.ListProducts)
-	mux.HandleFunc("POST /api/products", h.CreateProduct)
-	mux.HandleFunc("PUT /api/products/{id}", h.UpdateProduct)
-	mux.HandleFunc("DELETE /api/products/{id}", h.DeleteProduct)
+	mux.HandleFunc("GET /api/products", productHandler.List)
+	mux.HandleFunc("POST /api/products", productHandler.Create)
+	mux.HandleFunc("PUT /api/products/{id}", productHandler.Update)
+	mux.HandleFunc("DELETE /api/products/{id}", productHandler.Delete)
 
-	mux.HandleFunc("GET /api/categories", h.ListCategories)
-	mux.HandleFunc("POST /api/categories", h.CreateCategory)
-	mux.HandleFunc("PUT /api/categories/{id}", h.UpdateCategory)
-	mux.HandleFunc("DELETE /api/categories/{id}", h.DeleteCategory)
+	mux.HandleFunc("GET /api/categories", categoryHandler.List)
+	mux.HandleFunc("POST /api/categories", categoryHandler.Create)
+	mux.HandleFunc("PUT /api/categories/{id}", categoryHandler.Update)
+	mux.HandleFunc("DELETE /api/categories/{id}", categoryHandler.Delete)
 
-	mux.HandleFunc("GET /api/collections", h.ListCollections)
-	mux.HandleFunc("POST /api/collections", h.CreateCollection)
-	mux.HandleFunc("PUT /api/collections/{id}", h.UpdateCollection)
-	mux.HandleFunc("DELETE /api/collections/{id}", h.DeleteCollection)
+	mux.HandleFunc("GET /api/collections", collectionHandler.List)
+	mux.HandleFunc("POST /api/collections", collectionHandler.Create)
+	mux.HandleFunc("PUT /api/collections/{id}", collectionHandler.Update)
+	mux.HandleFunc("DELETE /api/collections/{id}", collectionHandler.Delete)
 
-	mux.HandleFunc("GET /api/shops", h.ListShops)
-	mux.HandleFunc("POST /api/shops", h.CreateShop)
-	mux.HandleFunc("GET /api/shops/{id}", h.GetShop)
-	mux.HandleFunc("GET /api/shops/{id}/products", h.GetShopProducts)
-	mux.HandleFunc("GET /api/shops/{id}/categories", h.GetShopCategories)
-	mux.HandleFunc("PUT /api/shops/{id}", h.UpdateShop)
-	mux.HandleFunc("DELETE /api/shops/{id}", h.DeleteShop)
+	mux.HandleFunc("GET /api/shops", shopHandler.List)
+	mux.HandleFunc("POST /api/shops", shopHandler.Create)
+	mux.HandleFunc("GET /api/shops/{id}", shopHandler.Get)
+	mux.HandleFunc("GET /api/shops/{id}/products", shopHandler.Products)
+	mux.HandleFunc("GET /api/shops/{id}/categories", shopHandler.Categories)
+	mux.HandleFunc("PUT /api/shops/{id}", shopHandler.Update)
+	mux.HandleFunc("DELETE /api/shops/{id}", shopHandler.Delete)
 
 	handler := corsMiddleware(mux)
 
