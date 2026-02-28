@@ -6,35 +6,37 @@ import (
 	"sort"
 	"sync"
 
-	"categories-test/internal/domain/entity"
-	domainerrors "categories-test/internal/domain/errors"
+	"categories-test/internal/categories"
+	"categories-test/internal/collections"
+	"categories-test/internal/products"
+	"categories-test/internal/shops"
 )
 
 const dataFile = "data.json"
 
 type Store struct {
 	mu          sync.RWMutex
-	Products    map[int]*entity.Product
-	Categories  map[int]*entity.Category
-	Collections map[int]*entity.Collection
-	Shops       map[int]*entity.Shop
+	Products    map[int]*products.Product
+	Categories  map[int]*categories.Category
+	Collections map[int]*collections.Collection
+	Shops       map[int]*shops.Shop
 	nextID      map[string]int
 }
 
 type storeData struct {
-	Products    map[int]*entity.Product    `json:"products"`
-	Categories  map[int]*entity.Category   `json:"categories"`
-	Collections map[int]*entity.Collection `json:"collections"`
-	Shops       map[int]*entity.Shop       `json:"shops"`
-	NextID      map[string]int             `json:"nextId"`
+	Products    map[int]*products.Product       `json:"products"`
+	Categories  map[int]*categories.Category    `json:"categories"`
+	Collections map[int]*collections.Collection `json:"collections"`
+	Shops       map[int]*shops.Shop             `json:"shops"`
+	NextID      map[string]int                  `json:"nextId"`
 }
 
 func New() *Store {
 	s := &Store{
-		Products:    make(map[int]*entity.Product),
-		Categories:  make(map[int]*entity.Category),
-		Collections: make(map[int]*entity.Collection),
-		Shops:       make(map[int]*entity.Shop),
+		Products:    make(map[int]*products.Product),
+		Categories:  make(map[int]*categories.Category),
+		Collections: make(map[int]*collections.Collection),
+		Shops:       make(map[int]*shops.Shop),
 		nextID:      map[string]int{"product": 1, "category": 1, "collection": 1, "shop": 1},
 	}
 	if err := s.load(); err == nil {
@@ -78,22 +80,22 @@ func (s *Store) save() error {
 }
 
 func (s *Store) seed() {
-	s.Categories[1] = &entity.Category{ID: 1, Name: "category1", ParentID: nil}
-	s.Categories[2] = &entity.Category{ID: 2, Name: "category2", ParentID: nil}
+	s.Categories[1] = &categories.Category{ID: 1, Name: "category1", ParentID: nil}
+	s.Categories[2] = &categories.Category{ID: 2, Name: "category2", ParentID: nil}
 	s.nextID["category"] = 3
 
-	s.Products[1] = &entity.Product{ID: 1, Name: "product1", Description: "prod1", Price: 20, CategoryIDs: []int{1}}
-	s.Products[2] = &entity.Product{ID: 2, Name: "product2", Description: "prod2", Price: 25, CategoryIDs: []int{1}}
-	s.Products[3] = &entity.Product{ID: 3, Name: "product3", Description: "prod3", Price: 30, CategoryIDs: []int{2}}
+	s.Products[1] = &products.Product{ID: 1, Name: "product1", Description: "prod1", Price: 20, CategoryIDs: []int{1}}
+	s.Products[2] = &products.Product{ID: 2, Name: "product2", Description: "prod2", Price: 25, CategoryIDs: []int{1}}
+	s.Products[3] = &products.Product{ID: 3, Name: "product3", Description: "prod3", Price: 30, CategoryIDs: []int{2}}
 	s.nextID["product"] = 4
 
 	parent1 := 1
-	s.Collections[1] = &entity.Collection{ID: 1, Name: "collection1", ParentID: nil, ProductIDs: []int{1, 3}}
-	s.Collections[2] = &entity.Collection{ID: 2, Name: "collection2", ParentID: &parent1, ProductIDs: []int{2}}
-	s.Collections[3] = &entity.Collection{ID: 3, Name: "collection3", ParentID: nil, ProductIDs: []int{1, 2, 3}}
+	s.Collections[1] = &collections.Collection{ID: 1, Name: "collection1", ParentID: nil, ProductIDs: []int{1, 3}}
+	s.Collections[2] = &collections.Collection{ID: 2, Name: "collection2", ParentID: &parent1, ProductIDs: []int{2}}
+	s.Collections[3] = &collections.Collection{ID: 3, Name: "collection3", ParentID: nil, ProductIDs: []int{1, 2, 3}}
 	s.nextID["collection"] = 4
 
-	s.Shops[1] = &entity.Shop{ID: 1, Name: "shop1", CollectionIDs: []int{1, 2, 3}}
+	s.Shops[1] = &shops.Shop{ID: 1, Name: "shop1", CollectionIDs: []int{1, 2, 3}}
 	s.nextID["shop"] = 2
 }
 
@@ -118,13 +120,13 @@ func mapToSlice[T any](m map[int]*T) []*T {
 	return result
 }
 
-func (s *Store) GetProducts() []*entity.Product {
+func (s *Store) GetProducts() []*products.Product {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return mapToSlice(s.Products)
 }
 
-func (s *Store) CreateProduct(p *entity.Product) (*entity.Product, error) {
+func (s *Store) CreateProduct(p *products.Product) (*products.Product, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p.ID = s.generateID("product")
@@ -136,7 +138,7 @@ func (s *Store) CreateProduct(p *entity.Product) (*entity.Product, error) {
 	return p, nil
 }
 
-func (s *Store) UpdateProduct(p *entity.Product) (*entity.Product, error) {
+func (s *Store) UpdateProduct(p *products.Product) (*products.Product, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p.CategoryIDs = ensureSlice(p.CategoryIDs)
@@ -151,7 +153,7 @@ func (s *Store) DeleteProduct(id int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.Products[id]; !ok {
-		return domainerrors.ErrNotFound
+		return products.ErrNotFound
 	}
 	delete(s.Products, id)
 	if err := s.save(); err != nil {
@@ -160,13 +162,13 @@ func (s *Store) DeleteProduct(id int) error {
 	return nil
 }
 
-func (s *Store) GetCategories() []*entity.Category {
+func (s *Store) GetCategories() []*categories.Category {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return mapToSlice(s.Categories)
 }
 
-func (s *Store) CreateCategory(c *entity.Category) (*entity.Category, error) {
+func (s *Store) CreateCategory(c *categories.Category) (*categories.Category, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c.ID = s.generateID("category")
@@ -177,7 +179,7 @@ func (s *Store) CreateCategory(c *entity.Category) (*entity.Category, error) {
 	return c, nil
 }
 
-func (s *Store) UpdateCategory(c *entity.Category) (*entity.Category, error) {
+func (s *Store) UpdateCategory(c *categories.Category) (*categories.Category, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.Categories[c.ID] = c
@@ -191,7 +193,7 @@ func (s *Store) DeleteCategory(id int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.Categories[id]; !ok {
-		return domainerrors.ErrNotFound
+		return categories.ErrNotFound
 	}
 
 	descendantIDs := s.getDescendantIDs(id)
@@ -202,9 +204,9 @@ func (s *Store) DeleteCategory(id int) error {
 			for _, toDelete := range allIDs {
 				if catID == toDelete {
 					if catID == id {
-						return domainerrors.ErrCategoryInUse
+						return categories.ErrCategoryInUse
 					}
-					return domainerrors.ErrChildCategoryInUse
+					return categories.ErrChildInUse
 				}
 			}
 		}
@@ -230,13 +232,13 @@ func (s *Store) getDescendantIDs(parentID int) []int {
 	return descendants
 }
 
-func (s *Store) GetCollections() []*entity.Collection {
+func (s *Store) GetCollections() []*collections.Collection {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return mapToSlice(s.Collections)
 }
 
-func (s *Store) CreateCollection(c *entity.Collection) (*entity.Collection, error) {
+func (s *Store) CreateCollection(c *collections.Collection) (*collections.Collection, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c.ID = s.generateID("collection")
@@ -248,7 +250,7 @@ func (s *Store) CreateCollection(c *entity.Collection) (*entity.Collection, erro
 	return c, nil
 }
 
-func (s *Store) UpdateCollection(c *entity.Collection) (*entity.Collection, error) {
+func (s *Store) UpdateCollection(c *collections.Collection) (*collections.Collection, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c.ProductIDs = ensureSlice(c.ProductIDs)
@@ -263,7 +265,7 @@ func (s *Store) DeleteCollection(id int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.Collections[id]; !ok {
-		return domainerrors.ErrNotFound
+		return collections.ErrNotFound
 	}
 	delete(s.Collections, id)
 	if err := s.save(); err != nil {
@@ -272,22 +274,22 @@ func (s *Store) DeleteCollection(id int) error {
 	return nil
 }
 
-func (s *Store) GetShops() []*entity.Shop {
+func (s *Store) GetShops() []*shops.Shop {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return mapToSlice(s.Shops)
 }
 
-func (s *Store) GetShop(id int) (*entity.Shop, error) {
+func (s *Store) GetShop(id int) (*shops.Shop, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if shop, ok := s.Shops[id]; ok {
 		return shop, nil
 	}
-	return nil, domainerrors.ErrNotFound
+	return nil, shops.ErrNotFound
 }
 
-func (s *Store) CreateShop(shop *entity.Shop) (*entity.Shop, error) {
+func (s *Store) CreateShop(shop *shops.Shop) (*shops.Shop, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	shop.ID = s.generateID("shop")
@@ -299,7 +301,7 @@ func (s *Store) CreateShop(shop *entity.Shop) (*entity.Shop, error) {
 	return shop, nil
 }
 
-func (s *Store) UpdateShop(shop *entity.Shop) (*entity.Shop, error) {
+func (s *Store) UpdateShop(shop *shops.Shop) (*shops.Shop, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	shop.CollectionIDs = ensureSlice(shop.CollectionIDs)
@@ -314,7 +316,7 @@ func (s *Store) DeleteShop(id int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.Shops[id]; !ok {
-		return domainerrors.ErrNotFound
+		return shops.ErrNotFound
 	}
 	delete(s.Shops, id)
 	if err := s.save(); err != nil {
@@ -323,14 +325,14 @@ func (s *Store) DeleteShop(id int) error {
 	return nil
 }
 
-func (s *Store) GetShopProducts(shopID int, collectionID *int, categoryID *int, page, limit int) *entity.PaginatedProducts {
+func (s *Store) GetShopProducts(shopID int, collectionID *int, categoryID *int, page, limit int) *shops.PaginatedProducts {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	shop, ok := s.Shops[shopID]
 	if !ok {
-		return &entity.PaginatedProducts{
-			Products:   []*entity.Product{},
+		return &shops.PaginatedProducts{
+			Products:   []*products.Product{},
 			Page:       page,
 			Limit:      limit,
 			TotalCount: 0,
@@ -381,18 +383,18 @@ func (s *Store) GetShopProducts(shopID int, collectionID *int, categoryID *int, 
 		productMap = filteredMap
 	}
 
-	products := make([]*entity.Product, 0, len(productMap))
+	matchedProducts := make([]*products.Product, 0, len(productMap))
 	for prodID := range productMap {
 		if prod, exists := s.Products[prodID]; exists {
-			products = append(products, prod)
+			matchedProducts = append(matchedProducts, prod)
 		}
 	}
 
-	sort.Slice(products, func(i, j int) bool {
-		return products[i].ID < products[j].ID
+	sort.Slice(matchedProducts, func(i, j int) bool {
+		return matchedProducts[i].ID < matchedProducts[j].ID
 	})
 
-	totalCount := len(products)
+	totalCount := len(matchedProducts)
 	totalPages := (totalCount + limit - 1) / limit
 	start := (page - 1) * limit
 	end := start + limit
@@ -403,14 +405,14 @@ func (s *Store) GetShopProducts(shopID int, collectionID *int, categoryID *int, 
 		end = totalCount
 	}
 
-	pagedProducts := products
+	pagedProducts := matchedProducts
 	if start < end {
-		pagedProducts = products[start:end]
+		pagedProducts = matchedProducts[start:end]
 	} else {
-		pagedProducts = []*entity.Product{}
+		pagedProducts = []*products.Product{}
 	}
 
-	return &entity.PaginatedProducts{
+	return &shops.PaginatedProducts{
 		Products:   pagedProducts,
 		Page:       page,
 		Limit:      limit,
@@ -439,7 +441,7 @@ func (s *Store) getDescendantCategoryIDs(parentID int) []int {
 	return result
 }
 
-func (s *Store) GetShopCategories(shopID int, collectionID *int, directOnly bool) []*entity.Category {
+func (s *Store) GetShopCategories(shopID int, collectionID *int, directOnly bool) []*categories.Category {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -476,7 +478,7 @@ func (s *Store) GetShopCategories(shopID int, collectionID *int, directOnly bool
 		}
 	}
 
-	categoryMap := make(map[int]*entity.Category)
+	categoryMap := make(map[int]*categories.Category)
 	for prodID := range productMap {
 		if prod, ok := s.Products[prodID]; ok {
 			for _, catID := range prod.CategoryIDs {
@@ -487,7 +489,7 @@ func (s *Store) GetShopCategories(shopID int, collectionID *int, directOnly bool
 		}
 	}
 
-	result := make([]*entity.Category, 0, len(categoryMap))
+	result := make([]*categories.Category, 0, len(categoryMap))
 	for _, cat := range categoryMap {
 		result = append(result, cat)
 	}

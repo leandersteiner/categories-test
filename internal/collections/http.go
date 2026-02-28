@@ -4,8 +4,6 @@ import (
 	"errors"
 	"net/http"
 
-	"categories-test/internal/domain/entity"
-	domainerrors "categories-test/internal/domain/errors"
 	"categories-test/internal/platform/httpx"
 )
 
@@ -25,12 +23,12 @@ type collectionDTO struct {
 	ProductIDs []int  `json:"productIds"`
 }
 
-func toCollectionDTO(c *entity.Collection) collectionDTO {
+func toCollectionDTO(c *Collection) collectionDTO {
 	return collectionDTO{ID: c.ID, Name: c.Name, ParentID: c.ParentID, ProductIDs: c.ProductIDs}
 }
 
-func fromCollectionDTO(dto collectionDTO) entity.Collection {
-	return entity.Collection{ID: dto.ID, Name: dto.Name, ParentID: dto.ParentID, ProductIDs: dto.ProductIDs}
+func fromCollectionDTO(dto collectionDTO) Collection {
+	return Collection{ID: dto.ID, Name: dto.Name, ParentID: dto.ParentID, ProductIDs: dto.ProductIDs}
 }
 
 func (h *HTTPHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -92,7 +90,7 @@ func (h *HTTPHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.commands.Delete(id); err != nil {
-		if errors.Is(err, domainerrors.ErrNotFound) {
+		if errors.Is(err, ErrNotFound) {
 			http.Error(w, "Collection not found", http.StatusNotFound)
 			return
 		}

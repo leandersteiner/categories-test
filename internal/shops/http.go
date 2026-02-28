@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"categories-test/internal/domain/entity"
-	domainerrors "categories-test/internal/domain/errors"
+	"categories-test/internal/categories"
 	"categories-test/internal/platform/httpx"
+	"categories-test/internal/products"
 )
 
 type HTTPHandler struct {
@@ -48,23 +48,23 @@ type paginatedProductsDTO struct {
 	TotalPages int          `json:"totalPages"`
 }
 
-func toShopDTO(s *entity.Shop) shopDTO {
+func toShopDTO(s *Shop) shopDTO {
 	return shopDTO{ID: s.ID, Name: s.Name, CollectionIDs: s.CollectionIDs}
 }
 
-func fromShopDTO(dto shopDTO) entity.Shop {
-	return entity.Shop{ID: dto.ID, Name: dto.Name, CollectionIDs: dto.CollectionIDs}
+func fromShopDTO(dto shopDTO) Shop {
+	return Shop{ID: dto.ID, Name: dto.Name, CollectionIDs: dto.CollectionIDs}
 }
 
-func toProductDTO(p *entity.Product) productDTO {
+func toProductDTO(p *products.Product) productDTO {
 	return productDTO{ID: p.ID, Name: p.Name, Description: p.Description, Price: p.Price, CategoryIDs: p.CategoryIDs}
 }
 
-func toCategoryDTO(c *entity.Category) categoryDTO {
+func toCategoryDTO(c *categories.Category) categoryDTO {
 	return categoryDTO{ID: c.ID, Name: c.Name, ParentID: c.ParentID}
 }
 
-func toPaginatedProductsDTO(value *entity.PaginatedProducts) paginatedProductsDTO {
+func toPaginatedProductsDTO(value *PaginatedProducts) paginatedProductsDTO {
 	products := make([]productDTO, 0, len(value.Products))
 	for _, product := range value.Products {
 		products = append(products, toProductDTO(product))
@@ -96,7 +96,7 @@ func (h *HTTPHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	shop, err := h.queries.Get(id)
 	if err != nil {
-		if errors.Is(err, domainerrors.ErrNotFound) {
+		if errors.Is(err, ErrNotFound) {
 			http.Error(w, "Shop not found", http.StatusNotFound)
 			return
 		}
@@ -157,7 +157,7 @@ func (h *HTTPHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.commands.Delete(id); err != nil {
-		if errors.Is(err, domainerrors.ErrNotFound) {
+		if errors.Is(err, ErrNotFound) {
 			http.Error(w, "Shop not found", http.StatusNotFound)
 			return
 		}

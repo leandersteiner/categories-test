@@ -1,4 +1,4 @@
-package entity
+package collections
 
 type Collection struct {
 	ID         int

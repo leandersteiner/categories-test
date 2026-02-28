@@ -1,4 +1,4 @@
-package entity
+package products
 
 type Product struct {
 	ID          int

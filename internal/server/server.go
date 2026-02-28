@@ -10,10 +10,10 @@ import (
 	"syscall"
 	"time"
 
-	"categories-test/internal/features/categories"
-	"categories-test/internal/features/collections"
-	"categories-test/internal/features/products"
-	"categories-test/internal/features/shops"
+	"categories-test/internal/categories"
+	"categories-test/internal/collections"
+	"categories-test/internal/products"
+	"categories-test/internal/shops"
 	"categories-test/internal/store"
 )
 

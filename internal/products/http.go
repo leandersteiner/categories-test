@@ -4,8 +4,6 @@ import (
 	"errors"
 	"net/http"
 
-	"categories-test/internal/domain/entity"
-	domainerrors "categories-test/internal/domain/errors"
 	"categories-test/internal/platform/httpx"
 )
 
@@ -26,7 +24,7 @@ type productDTO struct {
 	CategoryIDs []int   `json:"categoryIds"`
 }
 
-func toProductDTO(p *entity.Product) productDTO {
+func toProductDTO(p *Product) productDTO {
 	return productDTO{
 		ID:          p.ID,
 		Name:        p.Name,
@@ -36,8 +34,8 @@ func toProductDTO(p *entity.Product) productDTO {
 	}
 }
 
-func fromProductDTO(dto productDTO) entity.Product {
-	return entity.Product{
+func fromProductDTO(dto productDTO) Product {
+	return Product{
 		ID:          dto.ID,
 		Name:        dto.Name,
 		Description: dto.Description,
@@ -105,7 +103,7 @@ func (h *HTTPHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.commands.Delete(id); err != nil {
-		if errors.Is(err, domainerrors.ErrNotFound) {
+		if errors.Is(err, ErrNotFound) {
 			http.Error(w, "Product not found", http.StatusNotFound)
 			return
 		}
